@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Both halves of the app in one mark: a map pin — where you were — with an eighth note punched
+  through it — what you were there for. The note is a hole rather than a second shape, so the
+  whole thing stays a single silhouette that survives being tinted for a themed icon and shrunk
+  to a notification badge.
+
+  Sized against the 72dp a launcher actually shows of this 108 viewport (18..90), not the whole
+  plate: the pin spans y 31.5..76.5, which leaves it room to breathe inside a circle mask instead
+  of pressing against it. The note is cut deliberately large — a delicate one turns to mush at the
+  44px a launcher folder shows.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillType="evenOdd"
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,31.5 C44.9,31.5 37.5,38.9 37.5,48 C37.5,60.4 54,76.5 54,76.5 C54,76.5 70.5,60.4 70.5,48 C70.5,38.9 63.1,31.5 54,31.5 Z M57.8,37 C57.8,37 62.7,38.6 63.4,43 C63.8,45.8 61.8,47.6 61.8,47.6 C62.4,44.6 60.8,42.6 57.8,41.6 L57.8,51 C57.8,54.5 54.8,56.8 51.5,56.8 C48.5,56.8 46.5,55 46.5,52.5 C46.5,49.5 49.3,47.3 52.6,47.3 C53.5,47.3 54.3,47.45 55,47.7 L55,37 Z" />
+</vector>

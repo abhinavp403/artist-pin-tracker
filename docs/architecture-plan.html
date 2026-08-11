@@ -1,0 +1,730 @@
+<title>ArtistPin at Scale — Architecture Plan</title>
+<style>
+  :root {
+    --bg: #f3f5f4;
+    --surface: #ffffff;
+    --ink: #16212b;
+    --ink-muted: #55636e;
+    --ink-faint: #8996a0;
+    --accent: #1e6e8c;
+    --accent-ink: #ffffff;
+    --accent-soft: #dceaee;
+    --warn: #b5651d;
+    --warn-soft: #f3e3d3;
+    --line: #d7dedc;
+    --grid-line: rgba(22, 33, 43, 0.055);
+    --code-bg: #eaeeed;
+    --shadow: 0 1px 2px rgba(22, 33, 43, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10161b;
+      --surface: #161f26;
+      --ink: #e7eced;
+      --ink-muted: #93a2ab;
+      --ink-faint: #5f6d76;
+      --accent: #6cbcd6;
+      --accent-ink: #08181d;
+      --accent-soft: #16323a;
+      --warn: #e0995a;
+      --warn-soft: #3a2717;
+      --line: #263139;
+      --grid-line: rgba(231, 236, 237, 0.055);
+      --code-bg: #1c262d;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10161b;
+    --surface: #161f26;
+    --ink: #e7eced;
+    --ink-muted: #93a2ab;
+    --ink-faint: #5f6d76;
+    --accent: #6cbcd6;
+    --accent-ink: #08181d;
+    --accent-soft: #16323a;
+    --warn: #e0995a;
+    --warn-soft: #3a2717;
+    --line: #263139;
+    --grid-line: rgba(231, 236, 237, 0.055);
+    --code-bg: #1c262d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #f3f5f4;
+    --surface: #ffffff;
+    --ink: #16212b;
+    --ink-muted: #55636e;
+    --ink-faint: #8996a0;
+    --accent: #1e6e8c;
+    --accent-ink: #ffffff;
+    --accent-soft: #dceaee;
+    --warn: #b5651d;
+    --warn-soft: #f3e3d3;
+    --line: #d7dedc;
+    --grid-line: rgba(22, 33, 43, 0.055);
+    --code-bg: #eaeeed;
+    --shadow: 0 1px 2px rgba(22, 33, 43, 0.06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .head, .head * { font-family: -apple-system, "Helvetica Neue", "Segoe UI", Arial, sans-serif; }
+  .mono, .mono * { font-family: ui-monospace, "SF Mono", "Cascadia Code", "Menlo", Consolas, monospace; }
+
+  .page {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 56px 28px 120px;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 44px;
+    flex-wrap: wrap;
+  }
+  .masthead-eyebrow {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  .masthead h1 {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    line-height: 1.08;
+    margin: 0 0 12px;
+    max-width: 18ch;
+    text-wrap: balance;
+  }
+  .masthead .dek {
+    font-family: "Iowan Old Style", Palatino, Georgia, serif;
+    font-size: 16.5px;
+    color: var(--ink-muted);
+    max-width: 52ch;
+    margin: 0;
+  }
+  .status {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    padding-top: 4px;
+  }
+  .pill {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 5px 11px;
+    border-radius: 3px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    white-space: nowrap;
+  }
+  .status .meta {
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    text-align: right;
+    line-height: 1.5;
+  }
+
+  /* ---------- toc ---------- */
+
+  .toc {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 2px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    margin-bottom: 56px;
+    font-size: 13px;
+  }
+  .toc a {
+    display: block;
+    background: var(--surface);
+    color: var(--ink);
+    text-decoration: none;
+    padding: 12px 14px;
+  }
+  .toc a:hover, .toc a:focus-visible { background: var(--accent-soft); color: var(--accent); }
+  .toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .toc .n { color: var(--accent); font-weight: 700; margin-right: 8px; }
+
+  /* ---------- sections ---------- */
+
+  section { margin-bottom: 68px; scroll-margin-top: 24px; }
+  section > .prose { max-width: 66ch; }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 18px;
+    max-width: 66ch;
+  }
+  .section-num {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    flex: none;
+  }
+  h2 {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 30px 0 10px;
+    max-width: 66ch;
+  }
+  p { margin: 0 0 16px; max-width: 66ch; }
+  p.wide { max-width: none; }
+  .lede { font-size: 18.5px; color: var(--ink-muted); }
+
+  a { color: var(--accent); }
+
+  code {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--code-bg);
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+  }
+
+  ul, ol { max-width: 66ch; padding-left: 1.3em; margin: 0 0 16px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--ink-faint); }
+
+  .callout {
+    max-width: 66ch;
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+    background: var(--warn-soft);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin: 22px 0;
+    font-size: 15px;
+  }
+  .callout .callout-label {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--warn);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  /* ---------- blueprint diagram panel ---------- */
+
+  .sheet {
+    position: relative;
+    background:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+      var(--surface);
+    background-size: 24px 24px, 24px 24px, auto;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 26px 22px 18px;
+    margin: 22px 0 30px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .sheet::before, .sheet::after,
+  .sheet .tick-br, .sheet .tick-bl {
+    content: "";
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-color: var(--ink-faint);
+    border-style: solid;
+  }
+  .sheet::before { top: 6px; left: 6px; border-width: 1px 0 0 1px; }
+  .sheet::after { top: 6px; right: 6px; border-width: 1px 1px 0 0; }
+  .sheet .tick-bl { bottom: 6px; left: 6px; border-width: 0 0 1px 1px; }
+  .sheet .tick-br { bottom: 6px; right: 6px; border-width: 0 1px 1px 0; }
+  .sheet svg { display: block; min-width: 560px; margin: 0 auto; }
+  .sheet figcaption {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    text-align: center;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line);
+  }
+  .sheet-label {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  svg text { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; }
+  svg .mono-label { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* ---------- tables ---------- */
+
+  .table-wrap { overflow-x: auto; margin: 22px 0 30px; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 620px;
+    font-size: 14.5px;
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  caption {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 8px;
+  }
+  th, td {
+    text-align: left;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  thead th {
+    font-size: 11.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    border-bottom: 2px solid var(--ink);
+    font-weight: 700;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.phase {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--accent);
+    font-weight: 700;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  td.rec { position: relative; }
+  td.rec::after {
+    content: "recommended";
+    display: block;
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-top: 4px;
+  }
+  th.recommended { color: var(--accent) !important; }
+
+  /* ---------- recommendation box ---------- */
+
+  .recbox {
+    max-width: 66ch;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 18px 20px;
+    margin: 26px 0;
+  }
+  .recbox .callout-label {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 8px;
+  }
+  .recbox p:last-child { margin-bottom: 0; }
+
+  footer.doc-end {
+    max-width: 66ch;
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 640px) {
+    .masthead { flex-direction: column; }
+    .status { align-items: flex-start; }
+    .status .meta { text-align: left; }
+    .sheet svg { min-width: 480px; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead head">
+    <div>
+      <p class="masthead-eyebrow">Architecture plan — draft</p>
+      <h1>ArtistPin at scale</h1>
+      <p class="dek">Moving from a single phone's Room database to a backend that can hold everyone's shows — without losing the thing that makes the app fast today.</p>
+    </div>
+    <div class="status">
+      <span class="pill">Proposal · v1</span>
+      <span class="meta">7 phases · 3 diagrams<br>for review, not yet building</span>
+    </div>
+  </header>
+
+  <nav class="toc head" aria-label="Sections">
+    <a href="#today"><span class="n">00</span>Where we are</a>
+    <a href="#split"><span class="n">01</span>The core split</a>
+    <a href="#target"><span class="n">02</span>Target architecture</a>
+    <a href="#sync"><span class="n">03</span>Sync, offline-first</a>
+    <a href="#migration"><span class="n">04</span>Migrating your data</a>
+    <a href="#roadmap"><span class="n">05</span>Phased rollout</a>
+    <a href="#stack"><span class="n">06</span>Choosing a backend</a>
+  </nav>
+
+  <section id="today">
+    <div class="section-head head"><span class="section-num">00</span><h2>Where we are today</h2></div>
+    <div class="prose">
+      <p class="lede">One phone, one database, no concept of "whose data this is."</p>
+      <p>Every show lives in a local Room database. <code>ConcertRepository.saveEvent()</code> finds-or-creates a city, a venue and a set of artists by natural key, then writes one event row and its artist cross-refs in a single transaction. It's a good design — it just assumes there is exactly one user, sitting on exactly one phone, forever.</p>
+      <p>Three things about the current build won't survive contact with a second phone, let alone a thousand:</p>
+      <ul>
+        <li>The Spotify client secret is compiled into the APK (<code>BuildConfig.SPOTIFY_CLIENT_ID/SECRET</code>) — fine when only you can decompile it, not once the app is public.</li>
+        <li>Every phone does its own artist lookups. <code>MusicBrainzGenreSource</code> throttles itself to one request per second per device — a thousand devices looking up the same artist is a thousand times the work for an answer that never changes.</li>
+        <li>Photos live in this phone's private storage via <code>MediaImporter</code>. There is no second copy anywhere.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="split">
+    <div class="section-head head"><span class="section-num">01</span><h2>The core idea: split catalog from library</h2></div>
+    <div class="prose">
+      <p class="lede">Most of what's in the database isn't actually <em>yours</em>.</p>
+      <p>Bedouin's Spotify image and genre tags are true for every user who has ever seen them — they don't belong to you any more than the venue's street address does. The only thing that's actually personal is the fact that <em>you</em> stood in front of them on a given night. Today's schema already gestures at this split without naming it: <code>findByName</code>, <code>findCity</code> and <code>findVenue</code> exist specifically so a second show at a known venue reuses the row instead of duplicating it. At scale, that same lookup just needs to happen against everyone's data, not one phone's.</p>
+      <p>So the schema splits in two:</p>
+      <ul>
+        <li><strong>Catalog</strong> — <code>artists</code>, <code>venues</code>, <code>cities</code>. Global, deduplicated by name, owned by nobody. Looked up once, reused by everyone.</li>
+        <li><strong>Library</strong> — <code>events</code>, <code>event_artist</code>. Private, each row stamped with a <code>user_id</code>, referencing the catalog by id.</li>
+      </ul>
+    </div>
+    <figure class="sheet">
+      <span class="tick-bl"></span><span class="tick-br"></span>
+      <p class="sheet-label mono">fig. 1 — ownership boundary</p>
+      <svg viewBox="0 0 720 400" role="img" aria-label="A diagram showing Artists, Venues and Cities grouped as a shared global Catalog on the left, and Users and Events grouped as private per-user Library data on the right, separated by a dashed ownership boundary. Arrows from Events cross the boundary to reference Venues and Artists by id.">
+        <defs>
+          <marker id="arrow1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <line x1="352" y1="20" x2="352" y2="380" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.5" stroke-dasharray="5 5" />
+        <text x="352" y="14" text-anchor="middle" font-size="10.5" letter-spacing="0.06em" fill="currentColor" opacity="0.55" class="mono-label">OWNERSHIP BOUNDARY</text>
+
+        <text x="30" y="36" font-size="11.5" font-weight="700" letter-spacing="0.08em" fill="var(--accent)">CATALOG — SHARED, GLOBAL</text>
+        <text x="392" y="36" font-size="11.5" font-weight="700" letter-spacing="0.08em" fill="currentColor" opacity="0.7">LIBRARY — PRIVATE, PER USER</text>
+
+        <!-- catalog boxes -->
+        <g>
+          <rect x="30" y="60" width="150" height="52" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="105" y="82" text-anchor="middle" font-size="13" font-weight="600">artists</text>
+          <text x="105" y="99" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">unique by name</text>
+        </g>
+        <g>
+          <rect x="30" y="128" width="150" height="52" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="105" y="150" text-anchor="middle" font-size="13" font-weight="600">venues</text>
+          <text x="105" y="167" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">unique by name+city</text>
+        </g>
+        <g>
+          <rect x="30" y="196" width="150" height="52" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="105" y="218" text-anchor="middle" font-size="13" font-weight="600">cities</text>
+          <text x="105" y="235" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">unique by name+country</text>
+        </g>
+        <text x="30" y="285" font-size="11" fill="currentColor" opacity="0.6" font-style="italic">one row per artist,</text>
+        <text x="30" y="300" font-size="11" fill="currentColor" opacity="0.6" font-style="italic">looked up once, ever</text>
+
+        <!-- library boxes -->
+        <g>
+          <rect x="540" y="60" width="150" height="52" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="615" y="82" text-anchor="middle" font-size="13" font-weight="600">users</text>
+          <text x="615" y="99" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">one row per account</text>
+        </g>
+        <g>
+          <rect x="392" y="196" width="150" height="52" rx="3" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.6"/>
+          <text x="467" y="218" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">events</text>
+          <text x="467" y="235" text-anchor="middle" font-size="10" fill="var(--accent)" opacity="0.85">owned by a user_id</text>
+        </g>
+        <g>
+          <rect x="562" y="196" width="150" height="52" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="637" y="218" text-anchor="middle" font-size="13" font-weight="600">event_artist</text>
+          <text x="637" y="235" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">headliner or support</text>
+        </g>
+
+        <!-- crossing references -->
+        <line x1="392" y1="222" x2="185" y2="154" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arrow1)" />
+        <text x="245" y="180" font-size="10" fill="var(--accent)" class="mono-label">references</text>
+
+        <line x1="562" y1="222" x2="185" y2="86" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arrow1)" />
+        <text x="380" y="130" font-size="10" fill="var(--accent)" class="mono-label">references</text>
+
+        <line x1="467" y1="196" x2="580" y2="112" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.4" marker-end="url(#arrow1)" />
+        <text x="500" y="150" font-size="10" fill="currentColor" opacity="0.6" class="mono-label">owned by</text>
+      </svg>
+      <figcaption>Artists, venues and cities are looked up once and shared by every account; only events and their lineups carry a user_id.</figcaption>
+    </figure>
+    <div class="prose">
+      <p>This is also what makes the scaling math work: with 10,000 users but 40,000 distinct artists between them, you run roughly 40,000 Spotify/MusicBrainz lookups <em>ever</em> — not 10,000 × (however many artists each person adds). The catalog only grows when someone adds a genuinely new artist or venue; everyone after that gets a cache hit.</p>
+    </div>
+  </section>
+
+  <section id="target">
+    <div class="section-head head"><span class="section-num">02</span><h2>Target architecture</h2></div>
+    <div class="prose">
+      <p>The phone stops being the database and becomes a client of one. Room doesn't disappear — it becomes a local cache and an outbox for writes made offline (more on that in §03) — but the durable copy of every user's data lives behind a backend API.</p>
+    </div>
+    <figure class="sheet">
+      <span class="tick-bl"></span><span class="tick-br"></span>
+      <p class="sheet-label mono">fig. 2 — request paths</p>
+      <svg viewBox="0 0 760 340" role="img" aria-label="Diagram: the phone, holding a local Room cache, syncs with a backend API. The backend API reads and writes Postgres (split into catalog and library tables), uploads and serves media from object storage, and makes cached lookups to Spotify, MusicBrainz and Places on behalf of every user, rather than each phone calling them directly.">
+        <defs>
+          <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <!-- phone -->
+        <rect x="20" y="130" width="140" height="80" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="90" y="160" text-anchor="middle" font-size="13" font-weight="700">Phone</text>
+        <text x="90" y="178" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">Room: cache + outbox</text>
+
+        <!-- backend -->
+        <rect x="300" y="130" width="150" height="80" rx="4" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.8"/>
+        <text x="375" y="160" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">Backend API</text>
+        <text x="375" y="178" text-anchor="middle" font-size="10" fill="var(--accent)" opacity="0.85">auth · sync · cache</text>
+
+        <line x1="160" y1="170" x2="298" y2="170" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow2)" marker-start="url(#arrow2)" />
+        <text x="229" y="158" text-anchor="middle" font-size="10" fill="currentColor" class="mono-label">sync: outbox up, changes down</text>
+
+        <!-- postgres -->
+        <rect x="600" y="30" width="150" height="66" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <text x="675" y="56" text-anchor="middle" font-size="12.5" font-weight="600">Postgres</text>
+        <text x="675" y="73" text-anchor="middle" font-size="9.5" fill="currentColor" opacity="0.6">catalog + library</text>
+
+        <!-- object storage -->
+        <rect x="600" y="130" width="150" height="66" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <text x="675" y="156" text-anchor="middle" font-size="12.5" font-weight="600">Object storage</text>
+        <text x="675" y="173" text-anchor="middle" font-size="9.5" fill="currentColor" opacity="0.6">photos &amp; video</text>
+
+        <!-- third party -->
+        <rect x="600" y="230" width="150" height="74" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <text x="675" y="256" text-anchor="middle" font-size="12.5" font-weight="600">Spotify · MBz · Places</text>
+        <text x="675" y="273" text-anchor="middle" font-size="9.5" fill="currentColor" opacity="0.6">one lookup, every user</text>
+        <text x="675" y="288" text-anchor="middle" font-size="9.5" fill="currentColor" opacity="0.6">benefits</text>
+
+        <line x1="450" y1="155" x2="598" y2="70" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow2)" />
+        <text x="540" y="98" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.75" class="mono-label">reads / writes</text>
+
+        <line x1="450" y1="175" x2="598" y2="163" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow2)" />
+        <text x="530" y="188" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.75" class="mono-label">upload / serve</text>
+
+        <line x1="450" y1="195" x2="598" y2="255" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow2)" />
+        <text x="533" y="238" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.75" class="mono-label">cached lookup, keys server-side</text>
+      </svg>
+      <figcaption>The phone never calls Spotify, MusicBrainz or Places directly — the backend does, once per artist or venue, and caches the answer for everyone after.</figcaption>
+    </figure>
+    <p class="wide" style="max-width:66ch">Two details worth calling out because they fix concrete problems in the app as it stands today:</p>
+    <ul style="max-width:66ch">
+      <li><strong>Keys move server-side.</strong> The Spotify client secret leaves <code>BuildConfig</code> entirely — the backend holds it, the phone never sees it.</li>
+      <li><strong>Third-party calls become one-time, not one-per-phone.</strong> The MusicBrainz 1-req/sec throttle in <code>MusicBrainzGenreSource</code> stops being a per-device constant and becomes a backend job queue — still throttled, but shared across the whole catalog instead of duplicated by every phone that happens to add the same DJ.</li>
+    </ul>
+  </section>
+
+  <section id="sync">
+    <div class="section-head head"><span class="section-num">03</span><h2>Sync has to survive a bad venue signal</h2></div>
+    <div class="prose">
+      <p>Adding a show usually happens standing in a club, not on wifi. The save can't wait on a network round trip — it has to feel exactly as instant as it does today. Concerts also aren't collaboratively edited: nobody else is racing you to log the show you just left, so the sync model can be genuinely simple — an outbox, not a conflict-resolution engine.</p>
+    </div>
+    <figure class="sheet">
+      <span class="tick-bl"></span><span class="tick-br"></span>
+      <p class="sheet-label mono">fig. 3 — adding a show with no signal</p>
+      <svg viewBox="0 0 720 300" role="img" aria-label="Sequence diagram, five steps: the phone writes the new show to Room instantly and queues it in a local outbox; later, once online, the outbox sends the queued write to the backend; the backend resolves the venue and artists against the catalog, creating new rows only if they don't already exist; it inserts the private event row into Postgres; and it acknowledges the phone, which then marks the local row as synced.">
+        <defs>
+          <marker id="arrow3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <!-- lifelines -->
+        <g font-size="11.5" font-weight="700" text-anchor="middle">
+          <text x="90" y="24">Phone</text>
+          <text x="270" y="24">Local outbox</text>
+          <text x="470" y="24">Backend</text>
+          <text x="650" y="24">Postgres</text>
+        </g>
+        <line x1="90" y1="34" x2="90" y2="286" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+        <line x1="270" y1="34" x2="270" y2="286" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+        <line x1="470" y1="34" x2="470" y2="286" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+        <line x1="650" y1="34" x2="650" y2="286" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.2"/>
+
+        <!-- step 1 -->
+        <text x="14" y="66" font-size="12" font-weight="700" fill="var(--accent)">1</text>
+        <line x1="90" y1="70" x2="90" y2="70" />
+        <rect x="60" y="56" width="60" height="28" rx="3" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+        <text x="90" y="74" text-anchor="middle" font-size="9.5" fill="var(--accent)">Room</text>
+        <text x="130" y="74" font-size="10.5" fill="currentColor" opacity="0.8">write is instant &amp; local — no network on the critical path</text>
+
+        <!-- step 2 -->
+        <text x="14" y="112" font-size="12" font-weight="700" fill="var(--accent)">2</text>
+        <line x1="90" y1="118" x2="262" y2="118" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow3)"/>
+        <text x="178" y="110" text-anchor="middle" font-size="10" class="mono-label" fill="currentColor" opacity="0.75">queue write</text>
+
+        <!-- step 3 -->
+        <text x="14" y="156" font-size="12" font-weight="700" fill="var(--accent)">3</text>
+        <line x1="270" y1="162" x2="462" y2="162" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow3)"/>
+        <text x="366" y="154" text-anchor="middle" font-size="10" class="mono-label" fill="currentColor" opacity="0.75">send, once back online</text>
+
+        <!-- step 4 -->
+        <text x="14" y="200" font-size="12" font-weight="700" fill="var(--accent)">4</text>
+        <line x1="470" y1="206" x2="642" y2="206" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow3)"/>
+        <text x="560" y="198" text-anchor="middle" font-size="10" class="mono-label" fill="currentColor" opacity="0.75">find-or-create venue + artists, insert event</text>
+
+        <!-- step 5 -->
+        <text x="14" y="244" font-size="12" font-weight="700" fill="var(--accent)">5</text>
+        <line x1="470" y1="250" x2="98" y2="250" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow3)"/>
+        <text x="284" y="242" text-anchor="middle" font-size="10" class="mono-label" fill="currentColor" opacity="0.75">ack → mark local row as synced</text>
+      </svg>
+      <figcaption>Steps 1–2 happen with zero network dependency; 3–5 happen whenever the phone next has signal, in the background.</figcaption>
+    </figure>
+    <p>Step 4 is doing the same job <code>findCity</code>/<code>findVenue</code>/<code>findByName</code> already do locally — it just runs against everyone's catalog instead of one phone's copy. Nothing about that lookup is new work; it's the existing pattern, moved.</p>
+  </section>
+
+  <section id="migration">
+    <div class="section-head head"><span class="section-num">04</span><h2>Migrating what's already on your phone</h2></div>
+    <div class="prose">
+      <p>You already have an export path: the backup feature writes exactly the shape of data a migration needs — every show, artist, venue and city, as JSON, produced by <code>BackupRepository</code>. The first account ever created on the new backend can be seeded by running that same export through the backend's import endpoint once, rather than typing 50 shows back in by hand.</p>
+      <p>That also means the backup feature doesn't get retired once sync exists — it's repurposed as the one-time bridge, and can stay on afterward as a personal export/download option independent of the account system.</p>
+    </div>
+  </section>
+
+  <section id="roadmap">
+    <div class="section-head head"><span class="section-num">05</span><h2>Phased rollout</h2></div>
+    <div class="prose">
+      <p>Ordered so each phase ships something real on its own — none of it is a dead end if the next one gets delayed.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption class="head">Five phases, in order</caption>
+        <thead>
+          <tr><th>Phase</th><th>Ships</th><th>Why this order</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="phase">00</td>
+            <td>Move the Spotify secret behind a thin proxy — even a single serverless function.</td>
+            <td>Pure security fix. Needs no accounts, no sync, no schema change — and it's the one item that gets more dangerous the longer it waits.</td>
+          </tr>
+          <tr>
+            <td class="phase">01</td>
+            <td>Sign-in, backend skeleton, catalog/library split in Postgres. Single device, always-online.</td>
+            <td>This alone is "many users, safely" — private shows, shared catalog. No offline handling yet, so it's the smallest slice that's genuinely multi-user.</td>
+          </tr>
+          <tr>
+            <td class="phase">02</td>
+            <td>Room becomes a real cache + outbox; background sync, per fig. 3.</td>
+            <td>Now the app works the way it does today at a show with no signal — this is the phase users would actually notice if it were missing.</td>
+          </tr>
+          <tr>
+            <td class="phase">03</td>
+            <td>Photos move to object storage via presigned uploads; thumbnailing; per-user quota.</td>
+            <td>Media is the expensive, slow-changing part — worth doing once the write path (phases 1–2) is trusted.</td>
+          </tr>
+          <tr>
+            <td class="phase">04</td>
+            <td><em>Optional, later:</em> anything social — "who else was here," shared show pages.</td>
+            <td>Explicitly outside today's spirit (a personal tracker, not a feed). Only worth it if it's actually wanted, once 00–03 are solid.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <span class="callout-label head">Not everything moves to the backend</span>
+      Sort order for the artist list is stored on-device via DataStore today, and should stay that way — it's a device preference, not content. Scaling the data doesn't mean centralizing every setting; only what's actually shared or actually needs a second copy has to leave the phone.
+    </div>
+  </section>
+
+  <section id="stack">
+    <div class="section-head head"><span class="section-num">06</span><h2>Choosing what runs the backend</h2></div>
+    <div class="prose">
+      <p>The schema is already relational — cities, venues, artists, events, cross-refs, exactly the shape Postgres wants. That rules out a document-store rebuild being worth the trouble, and points at one of three routes:</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption class="head">Backend options, for a one-developer team</caption>
+        <thead>
+          <tr><th class="recommended">Supabase</th><th>Firebase</th><th>Custom (Node + Postgres)</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="rec">Postgres directly — today's schema ports over with almost no reshaping.</td>
+            <td>Firestore is document-based — the catalog/library split has to be re-modeled around collections.</td>
+            <td>Postgres directly, same as Supabase — but you write and operate the API layer yourself.</td>
+          </tr>
+          <tr>
+            <td>Row-Level Security maps cleanly onto "your events are private, catalog is public-read" — enforced by the database, not app code.</td>
+            <td>Security rules are written per-collection in a separate DSL — workable, but a second thing to keep in sync with the schema.</td>
+            <td>You write the authorization checks yourself, in your own API code.</td>
+          </tr>
+          <tr>
+            <td>Auth, Storage and a Postgres instance bundled — one thing to run.</td>
+            <td>Auth and Storage bundled; excellent free tier for early growth.</td>
+            <td>Nothing bundled — auth, storage and hosting are each a separate decision.</td>
+          </tr>
+          <tr>
+            <td>Lock-in is mild — it's plain Postgres underneath; exportable at any time.</td>
+            <td>Lock-in is real — Firestore's data model doesn't export cleanly to a relational shape later.</td>
+            <td>No lock-in at all — and no guardrails either.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="recbox">
+      <span class="callout-label">Recommendation</span>
+      <p>Supabase. The schema you already have — <code>CityEntity</code>, <code>VenueEntity</code>, <code>ArtistEntity</code>, <code>EventEntity</code>, <code>EventArtistCrossRef</code> — is close to a direct copy of what phase&nbsp;01 needs in Postgres. Row-Level Security gives you the catalog/library ownership boundary from fig.&nbsp;1 as an enforced database policy on day one, not application logic you have to get right in every code path that touches the data.</p>
+    </div>
+  </section>
+
+  <footer class="doc-end head">
+    ArtistPin — architecture plan, draft v1. Diagrams describe the target state; nothing here has been built yet.
+  </footer>
+
+</div>
