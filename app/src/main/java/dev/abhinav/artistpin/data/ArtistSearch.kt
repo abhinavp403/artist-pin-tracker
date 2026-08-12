@@ -66,25 +66,19 @@ class CachingArtistSearch(
 
 class SpotifyArtistSearch(
     private val api: SpotifyApi,
-    private val tokenProvider: SpotifyTokenProvider,
 ) : RemoteArtistSearch {
 
     override suspend fun search(query: String): List<ArtistSuggestion> = try {
-        val bearer = tokenProvider.bearer()
-        if (bearer == null) {
-            emptyList()
-        } else {
-            api.searchArtist(bearer = bearer, query = query).artists.items
-                .filter { it.name.isNotBlank() }
-                .map { artist ->
-                    ArtistSuggestion(
-                        name = artist.name,
-                        // Search returns images largest-first; the smallest is plenty for a 36dp row.
-                        imageUrl = artist.images.minByOrNull { it.width ?: Int.MAX_VALUE }?.url,
-                        genres = artist.genres,
-                    )
-                }
-        }
+        api.searchArtist(query = query).artists.items
+            .filter { it.name.isNotBlank() }
+            .map { artist ->
+                ArtistSuggestion(
+                    name = artist.name,
+                    // Search returns images largest-first; the smallest is plenty for a 36dp row.
+                    imageUrl = artist.images.minByOrNull { it.width ?: Int.MAX_VALUE }?.url,
+                    genres = artist.genres,
+                )
+            }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

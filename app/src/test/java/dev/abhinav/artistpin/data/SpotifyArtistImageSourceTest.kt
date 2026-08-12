@@ -11,14 +11,6 @@ import java.io.IOException
 @RunWith(RobolectricTestRunner::class)
 class SpotifyArtistImageSourceTest {
 
-    private class FakeAuthApi(var tokensIssued: Int = 0) : SpotifyAuthApi {
-        var expiresIn = 3600L
-        override suspend fun token(basicAuth: String, grantType: String): SpotifyTokenResponse {
-            tokensIssued++
-            return SpotifyTokenResponse("token-$tokensIssued", expiresIn)
-        }
-    }
-
     private class FakeApi(private val results: List<SpotifyArtist>) : SpotifyApi {
         constructor(artist: SpotifyArtist?) : this(listOfNotNull(artist))
 
@@ -26,17 +18,12 @@ class SpotifyArtistImageSourceTest {
         var fetchedIds = mutableListOf<String>()
         var byId: SpotifyArtist? = null
 
-        override suspend fun searchArtist(
-            bearer: String,
-            query: String,
-            type: String,
-            limit: Int,
-        ): SpotifySearchResponse {
+        override suspend fun searchArtist(query: String, limit: Int): SpotifySearchResponse {
             calls++
             return SpotifySearchResponse(SpotifyArtistPage(results))
         }
 
-        override suspend fun artist(bearer: String, id: String): SpotifyArtist {
+        override suspend fun artist(id: String): SpotifyArtist {
             fetchedIds += id
             return byId ?: SpotifyArtist(id = id, name = "pinned")
         }
@@ -80,13 +67,7 @@ class SpotifyArtistImageSourceTest {
         )
     }
 
-    private fun source(
-        api: SpotifyApi,
-        auth: SpotifyAuthApi = FakeAuthApi(),
-        id: String = "id",
-        secret: String = "secret",
-        clock: () -> Long = { 0L },
-    ) = SpotifyArtistImageSource(api, SpotifyTokenProvider(auth, id, secret, clock))
+    private fun source(api: SpotifyApi) = SpotifyArtistImageSource(api)
 
     @Test
     fun `picks a pin-sized image rather than the largest available`() = runTest {
@@ -107,37 +88,8 @@ class SpotifyArtistImageSourceTest {
         assertNull(source(FakeApi(artist())).profileFor("Playboi Carti").imageUrl)
     }
 
-    @Test
-    fun `without credentials it never calls the API`() = runTest {
-        val api = FakeApi(artist(640))
 
-        assertNull(source(api, id = "", secret = "").profileFor("Playboi Carti").imageUrl)
-        assertEquals(0, api.calls)
-    }
 
-    /** A burst of artist lookups must not fetch a token each time. */
-    @Test
-    fun `the token is cached across lookups`() = runTest {
-        val auth = FakeAuthApi()
-        val source = source(FakeApi(artist(640)), auth)
-
-        repeat(5) { source.profileFor("Playboi Carti") }
-
-        assertEquals(1, auth.tokensIssued)
-    }
-
-    @Test
-    fun `an expired token is refetched`() = runTest {
-        val auth = FakeAuthApi().apply { expiresIn = 60 }
-        var now = 0L
-        val source = source(FakeApi(artist(640)), auth, clock = { now })
-
-        source.profileFor("Playboi Carti")
-        now = 120_000
-        source.profileFor("Playboi Carti")
-
-        assertEquals(2, auth.tokensIssued)
-    }
 
     /**
      * The shape of the reported bug: searching "Dixon" led with the country singer Dixon Dallas.
@@ -182,15 +134,10 @@ class SpotifyArtistImageSourceTest {
     @Test
     fun `a network failure degrades to null instead of propagating`() = runTest {
         val failing = object : SpotifyApi {
-            override suspend fun searchArtist(
-                bearer: String,
-                query: String,
-                type: String,
-                limit: Int,
-            ): SpotifySearchResponse = throw IOException("offline")
-
-            override suspend fun artist(bearer: String, id: String): SpotifyArtist =
+            override suspend fun searchArtist(query: String, limit: Int): SpotifySearchResponse =
                 throw IOException("offline")
+
+            override suspend fun artist(id: String): SpotifyArtist = throw IOException("offline")
         }
 
         assertNull(source(failing).profileFor("Playboi Carti").imageUrl)

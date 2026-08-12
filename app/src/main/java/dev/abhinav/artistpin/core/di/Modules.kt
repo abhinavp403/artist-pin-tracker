@@ -26,8 +26,6 @@ import dev.abhinav.artistpin.data.RemoteArtistSearch
 import dev.abhinav.artistpin.data.SpotifyArtistSearch
 import dev.abhinav.artistpin.data.SpotifyApi
 import dev.abhinav.artistpin.data.SpotifyArtistImageSource
-import dev.abhinav.artistpin.data.SpotifyAuthApi
-import dev.abhinav.artistpin.data.SpotifyTokenProvider
 import dev.abhinav.artistpin.data.VenueSearchService
 import dev.abhinav.artistpin.feature.artists.ArtistDetailViewModel
 import dev.abhinav.artistpin.feature.artists.ArtistsViewModel
@@ -86,17 +84,32 @@ val networkModule = module {
             }
             .build()
     }
-    single<DeezerApi> { retrofit(DEEZER_BASE_URL, get()).create(DeezerApi::class.java) }
-    single<SpotifyAuthApi> { retrofit(SPOTIFY_ACCOUNTS_URL, get()).create(SpotifyAuthApi::class.java) }
-    single<SpotifyApi> { retrofit(SPOTIFY_API_URL, get()).create(SpotifyApi::class.java) }
-    single {
-        SpotifyTokenProvider(
-            authApi = get(),
-            clientId = BuildConfig.SPOTIFY_CLIENT_ID,
-            clientSecret = BuildConfig.SPOTIFY_CLIENT_SECRET,
-        )
+    single<OkHttpClient>(ProxyClient) {
+        val shared: OkHttpClient = get()
+        if (BuildConfig.ARTISTPIN_API_KEY.isBlank()) {
+            shared
+        } else {
+            // newBuilder shares the connection pool and thread pools rather than standing up a
+            // second one just to add a header.
+            shared.newBuilder()
+                .addInterceptor { chain ->
+                    chain.proceed(
+                        chain.request().newBuilder()
+                            .header("X-ArtistPin-Key", BuildConfig.ARTISTPIN_API_KEY)
+                            .build(),
+                    )
+                }
+                .build()
+        }
     }
-    single<RemoteArtistSearch> { CachingArtistSearch(SpotifyArtistSearch(get(), get())) }
+    single<DeezerApi> { retrofit(DEEZER_BASE_URL, get()).create(DeezerApi::class.java) }
+    // Spotify is reached through our own proxy, which holds the credentials. Its own client
+    // carries the proxy key; the shared one must not, or every Deezer and MusicBrainz request
+    // would leak it to a third party.
+    single<SpotifyApi> {
+        retrofit(BuildConfig.API_BASE_URL, get(ProxyClient)).create(SpotifyApi::class.java)
+    }
+    single<RemoteArtistSearch> { CachingArtistSearch(SpotifyArtistSearch(get())) }
     single<EventLinkImporter> { DiceEventLinkImporter(get(), json, get(IoDispatcher)) }
     single<MusicBrainzApi> { retrofit(MUSICBRAINZ_BASE_URL, get()).create(MusicBrainzApi::class.java) }
     single<ArtistImageSource> {
@@ -104,7 +117,7 @@ val networkModule = module {
         // from its API, and Deezer is the portrait fallback when Spotify has no picture.
         ChainedArtistImageSource(
             listOf(
-                SpotifyArtistImageSource(get(), get()),
+                SpotifyArtistImageSource(get()),
                 MusicBrainzGenreSource(get()),
                 DeezerArtistImageSource(get()),
             ),
@@ -121,8 +134,6 @@ private fun retrofit(baseUrl: String, client: OkHttpClient): Retrofit =
 
 private const val USER_AGENT = "ArtistPin/1.0 ( https://github.com/artistpin )"
 private const val DEEZER_BASE_URL = "https://api.deezer.com/"
-private const val SPOTIFY_ACCOUNTS_URL = "https://accounts.spotify.com/"
-private const val SPOTIFY_API_URL = "https://api.spotify.com/"
 private const val MUSICBRAINZ_BASE_URL = "https://musicbrainz.org/"
 
 

@@ -24,6 +24,9 @@ val mapsApiKey: String = providers
     .orElse("")
     .get()
 
+/** Overridable from local.properties for anyone running their own proxy. */
+val DEFAULT_API_BASE_URL = "https://artistpin-proxy-abhinavp403-3191s-projects.vercel.app/api/"
+
 android {
     namespace = "dev.abhinav.artistpin"
     compileSdk {
@@ -41,8 +44,15 @@ android {
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
         // Places needs the key at runtime, not just in the manifest.
         buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
-        buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"${localProperty("SPOTIFY_CLIENT_ID")}\"")
-        buildConfigField("String", "SPOTIFY_CLIENT_SECRET", "\"${localProperty("SPOTIFY_CLIENT_SECRET")}\"")
+        // Spotify credentials no longer ship with the app — the proxy in /server holds them.
+        // What's left is the proxy's address and an optional key for reaching it, neither of
+        // which is worth anything to someone who decompiles the APK.
+        buildConfigField(
+            "String",
+            "API_BASE_URL",
+            "\"${localProperty("API_BASE_URL").ifBlank { DEFAULT_API_BASE_URL }}\"",
+        )
+        buildConfigField("String", "ARTISTPIN_API_KEY", "\"${localProperty("ARTISTPIN_API_KEY")}\"")
     }
 
     buildTypes {

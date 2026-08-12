@@ -3,24 +3,11 @@ package dev.abhinav.artistpin.data
 import android.util.Log
 import dev.abhinav.artistpin.core.model.ArtistProfile
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import retrofit2.http.Field
-import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
-import retrofit2.http.Header
-import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
-import java.util.Base64
-
-@Serializable
-data class SpotifyTokenResponse(
-    @SerialName("access_token") val accessToken: String,
-    @SerialName("expires_in") val expiresInSeconds: Long = 3600,
-)
 
 @Serializable
 data class SpotifySearchResponse(
@@ -47,80 +34,32 @@ data class SpotifyImage(
     val width: Int? = null,
 )
 
-interface SpotifyAuthApi {
-    @FormUrlEncoded
-    @POST("api/token")
-    suspend fun token(
-        @Header("Authorization") basicAuth: String,
-        @Field("grant_type") grantType: String = "client_credentials",
-    ): SpotifyTokenResponse
-}
-
+/**
+ * Spotify, reached through this app's own proxy rather than directly.
+ *
+ * The proxy holds the client credentials that used to be compiled into the APK and hands back
+ * Spotify's responses untouched — which is why every model above is unchanged. No Authorization
+ * header here: the app has nothing left to authenticate with, which is the entire point.
+ */
 interface SpotifyApi {
-    @GET("v1/search")
+    @GET("spotify/search")
     suspend fun searchArtist(
-        @Header("Authorization") bearer: String,
         @Query("q") query: String,
-        @Query("type") type: String = "artist",
         // Enough results for the right artist to be in there even when better-known acts with
         // similar names outrank them. Spotify rejects anything above 10 on this endpoint.
         @Query("limit") limit: Int = 10,
     ): SpotifySearchResponse
 
-    @GET("v1/artists/{id}")
-    suspend fun artist(
-        @Header("Authorization") bearer: String,
-        @Path("id") id: String,
-    ): SpotifyArtist
-}
-
-/**
- * Client-credentials token holder. The token is app-wide rather than per-user, cached until just
- * before it expires, and guarded by a mutex so a burst of artist lookups triggers one fetch.
- */
-class SpotifyTokenProvider(
-    private val authApi: SpotifyAuthApi,
-    private val clientId: String,
-    private val clientSecret: String,
-    private val now: () -> Long = System::currentTimeMillis,
-) {
-    private val mutex = Mutex()
-    private var cachedToken: String? = null
-    private var expiresAtMillis: Long = 0
-
-    val isConfigured: Boolean get() = clientId.isNotBlank() && clientSecret.isNotBlank()
-
-    suspend fun bearer(forceRefresh: Boolean = false): String? {
-        if (!isConfigured) return null
-        return mutex.withLock {
-            val cached = cachedToken
-            if (!forceRefresh && cached != null && now() < expiresAtMillis) {
-                return@withLock "Bearer $cached"
-            }
-            val basic = Base64.getEncoder()
-                .encodeToString("$clientId:$clientSecret".toByteArray())
-            val response = authApi.token(basicAuth = "Basic $basic")
-            cachedToken = response.accessToken
-            // Renew a minute early so a lookup never races the expiry.
-            expiresAtMillis = now() + (response.expiresInSeconds - 60).coerceAtLeast(0) * 1_000
-            "Bearer ${response.accessToken}"
-        }
-    }
+    @GET("spotify/artist/{id}")
+    suspend fun artist(@Path("id") id: String): SpotifyArtist
 }
 
 class SpotifyArtistImageSource(
     private val api: SpotifyApi,
-    private val tokenProvider: SpotifyTokenProvider,
 ) : ArtistImageSource {
 
     override suspend fun profileFor(artistName: String): ArtistProfile = try {
-        val bearer = tokenProvider.bearer()
-        if (bearer == null) {
-            ArtistProfile()
-        } else {
-            val profile = search(artistName, bearer)
-            if (profile.isEmpty) retryWithFreshToken(artistName) else profile
-        }
+        search(artistName)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -128,19 +67,15 @@ class SpotifyArtistImageSource(
         ArtistProfile(lookupFailed = true)
     }
 
-    /** A cached token can be revoked server-side, so one 401 earns exactly one retry. */
-    private suspend fun retryWithFreshToken(artistName: String): ArtistProfile =
-        tokenProvider.bearer(forceRefresh = true)?.let { search(artistName, it) } ?: ArtistProfile()
-
-    private suspend fun search(artistName: String, bearer: String): ArtistProfile {
+    private suspend fun search(artistName: String): ArtistProfile {
         val pinned = overrideFor(artistName)?.spotifyId
         val artist = if (pinned != null) {
-            api.artist(bearer = bearer, id = pinned)
+            api.artist(id = pinned)
         } else {
             // Never the top hit by default. Search ranks by overall popularity, so "Dixon"
             // returns Dixon Dallas first — an exact name match is the only signal here worth
             // trusting, and no match at all beats confidently showing the wrong face.
-            api.searchArtist(bearer = bearer, query = artistName)
+            api.searchArtist(query = artistName)
                 .artists.items
                 .firstOrNull { it.name.normalizedArtistKey() == artistName.normalizedArtistKey() }
         }
