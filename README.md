@@ -32,22 +32,22 @@ happened.
 
 ## Building it
 
-You'll need your own API keys — none are checked into this repo. Create
-`local.properties` in the project root (already gitignored) with:
+Create `local.properties` in the project root (already gitignored) with:
 
 ```properties
 MAPS_API_KEY=your-google-maps-and-places-key
-SPOTIFY_CLIENT_ID=your-spotify-client-id
-SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
+
+# Optional — both have working defaults
+API_BASE_URL=https://your-own-proxy.vercel.app/api/
+ARTISTPIN_API_KEY=matches-ARTISTPIN_API_KEY-on-the-proxy
 ```
 
 - **Maps/Places key:** [Google Cloud Console](https://console.cloud.google.com/) — enable the
   Maps SDK for Android and the Places API.
-- **Spotify credentials:** [developer.spotify.com](https://developer.spotify.com/dashboard) —
-  client-credentials flow, no user login involved.
+- **Spotify credentials are not needed here.** They live on the proxy in [`server/`](server/),
+  never in the app. See that folder's README to run your own.
 
-The app runs without any of these set — you just won't get map tiles, venue search, or artist
-artwork.
+The app runs without any of these set — you just won't get map tiles or venue search.
 
 ```bash
 ./gradlew :app:assembleDebug
