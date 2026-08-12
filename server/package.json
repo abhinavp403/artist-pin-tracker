@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "name": "artistpin-proxy",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  }
+}
