@@ -53,6 +53,26 @@ android {
             "\"${localProperty("API_BASE_URL").ifBlank { DEFAULT_API_BASE_URL }}\"",
         )
         buildConfigField("String", "ARTISTPIN_API_KEY", "\"${localProperty("ARTISTPIN_API_KEY")}\"")
+
+        // Supabase. Neither of these is a secret in the way the Spotify credential was: the
+        // publishable key is designed to ship in the client, and Row-Level Security is what makes
+        // that safe. The service role key bypasses RLS entirely and must never appear here.
+        buildConfigField("String", "SUPABASE_URL", "\"${localProperty("SUPABASE_URL")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProperty("SUPABASE_ANON_KEY")}\"")
+        // Which ConcertRepository implementation is bound. Defaults to Room — the backend is
+        // pointless until B7 has imported the existing shows into it, and a build that ships
+        // before then would open on an empty map. Flip once the import has run.
+        buildConfigField(
+            "boolean",
+            "USE_BACKEND",
+            localProperty("USE_BACKEND").ifBlank { "false" },
+        )
+        // The *web* OAuth client id, not the Android one — see the note in supabase/README.md.
+        buildConfigField(
+            "String",
+            "GOOGLE_WEB_CLIENT_ID",
+            "\"${localProperty("GOOGLE_WEB_CLIENT_ID")}\"",
+        )
     }
 
     buildTypes {
@@ -128,6 +148,14 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)
     implementation(libs.okhttp)
+
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth)
+    implementation(libs.supabase.postgrest)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
 
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
