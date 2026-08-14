@@ -46,6 +46,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Remove
@@ -151,6 +153,7 @@ fun HomeScreen(
     onOpenArtist: (String) -> Unit,
     onOpenEvent: (String) -> Unit,
     onAddEvent: () -> Unit,
+    onSignOut: () -> Unit,
     mapViewModel: WorldMapViewModel = koinViewModel(),
     artistsViewModel: ArtistsViewModel = koinViewModel(),
 ) {
@@ -326,6 +329,12 @@ fun HomeScreen(
                 onOverflowDismiss = mapViewModel::onOverflowDismiss,
                 onBackUp = mapViewModel::onBackUpRequested,
                 onRestore = mapViewModel::onRestoreRequested,
+                showUploadAction = uiState.showUploadAction,
+                onUploadLibrary = mapViewModel::onUploadLibraryRequested,
+                onSignOut = {
+                    mapViewModel.onOverflowDismiss()
+                    onSignOut()
+                },
                 modifier = Modifier.align(Alignment.TopCenter),
             )
 
@@ -367,6 +376,7 @@ fun HomeScreen(
         RestoreConfirmationDialog(
             summary = backup.summary,
             currentShows = uiState.totalShows,
+            replaces = uiState.restoreReplaces,
             onConfirm = mapViewModel::onRestoreConfirmed,
             onDismiss = mapViewModel::onRestoreDismissed,
         )
@@ -395,6 +405,9 @@ private fun TopChrome(
     onOverflowDismiss: () -> Unit,
     onBackUp: () -> Unit,
     onRestore: () -> Unit,
+    showUploadAction: Boolean,
+    onUploadLibrary: () -> Unit,
+    onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -427,6 +440,9 @@ private fun TopChrome(
                 }
             }
             DropdownMenu(expanded = showOverflow, onDismissRequest = onOverflowDismiss) {
+                // Always available. Both go through LibraryBackup, which is bound to whichever
+                // store the app is actually reading, so a file written here always describes what
+                // you can see — and always restores back into it.
                 DropdownMenuItem(
                     text = { Text("Back up to a file") },
                     onClick = onBackUp,
@@ -436,6 +452,19 @@ private fun TopChrome(
                     text = { Text("Restore from a file") },
                     onClick = onRestore,
                     leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
+                )
+                if (showUploadAction) {
+                    DropdownMenuItem(
+                        text = { Text("Copy my shows to my account") },
+                        onClick = onUploadLibrary,
+                        leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
+                    )
+                }
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Sign out") },
+                    onClick = onSignOut,
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
                 )
             }
         }
@@ -764,12 +793,13 @@ private fun DockTab(
 private fun RestoreConfirmationDialog(
     summary: BackupSummary,
     currentShows: Int,
+    replaces: Boolean,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Restore this backup?") },
+        title = { Text(if (replaces) "Restore this backup?" else "Restore missing shows?") },
         text = {
             Text(
                 text = buildString {
@@ -780,17 +810,27 @@ private fun RestoreConfirmationDialog(
                     append(" artist(s) and ")
                     append(summary.venues)
                     append(" venue(s).\n\n")
-                    if (currentShows == 0) {
-                        append("Your library is empty, so nothing will be lost.")
-                    } else {
-                        append("This replaces everything currently in the app — ")
-                        append(currentShows)
-                        append(" show(s) will be deleted. This can't be undone.")
+                    when {
+                        // The two implementations do genuinely different things, so the dialog
+                        // says which one is about to happen rather than one reassuring average.
+                        !replaces -> append(
+                            "Anything in the file that's missing from your account will be added " +
+                                "back. Shows you already have are left alone, and nothing is deleted.",
+                        )
+                        currentShows == 0 ->
+                            append("Your library is empty, so nothing will be lost.")
+                        else -> {
+                            append("This replaces everything currently in the app — ")
+                            append(currentShows)
+                            append(" show(s) will be deleted. This can't be undone.")
+                        }
                     }
                 },
             )
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Replace") } },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(if (replaces) "Replace" else "Restore") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

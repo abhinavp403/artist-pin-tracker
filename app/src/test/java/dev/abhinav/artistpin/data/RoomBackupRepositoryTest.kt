@@ -25,12 +25,12 @@ import java.time.LocalDate
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-class BackupRepositoryTest {
+class RoomBackupRepositoryTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var database: ArtistPinDatabase
     private lateinit var concerts: ConcertRepository
-    private lateinit var backups: BackupRepository
+    private lateinit var backups: RoomBackupRepository
 
     @Before
     fun setUp() {
@@ -40,7 +40,7 @@ class BackupRepositoryTest {
             .setQueryExecutor(testDispatcher.asExecutor())
             .setTransactionExecutor(testDispatcher.asExecutor())
             .build()
-        concerts = ConcertRepository(
+        concerts = RoomConcertRepository(
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),
@@ -48,7 +48,7 @@ class BackupRepositoryTest {
             artistImageSource = FakeArtistImageSource(),
             ioDispatcher = testDispatcher,
         )
-        backups = BackupRepository(
+        backups = RoomBackupRepository(
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),
@@ -199,5 +199,13 @@ class BackupRepositoryTest {
         backups.restore((backups.parse(exported) as DataResult.Success).data)
 
         assertTrue(database.mediaDao().getMediaForEvent(eventId).isEmpty())
+    }
+
+    @Test
+    fun `restore replaces the local library rather than merging`() {
+        // The opposite of BackendBackupRepository, deliberately: on-device restore wipes and
+        // rewrites the tables. The confirmation dialog reads this flag to decide whether to warn
+        // about deletion, so the two implementations disagreeing here is the point.
+        assertTrue(backups.restoreReplaces)
     }
 }

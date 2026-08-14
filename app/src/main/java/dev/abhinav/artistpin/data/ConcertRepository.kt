@@ -1,43 +1,18 @@
 package dev.abhinav.artistpin.data
 
-import android.database.sqlite.SQLiteException
-import android.util.Log
 import android.net.Uri
-import dev.abhinav.artistpin.core.database.ArtistDao
-import dev.abhinav.artistpin.core.database.ArtistEntity
-import dev.abhinav.artistpin.core.database.CityEntity
-import dev.abhinav.artistpin.core.database.ConcertDao
-import dev.abhinav.artistpin.core.database.EventArtistCrossRef
-import dev.abhinav.artistpin.core.database.EventEntity
-import dev.abhinav.artistpin.core.database.EventMediaEntity
-import dev.abhinav.artistpin.core.database.MediaDao
-import dev.abhinav.artistpin.core.database.VenueEntity
-import dev.abhinav.artistpin.core.media.MediaImporter
 import dev.abhinav.artistpin.core.model.Artist
 import dev.abhinav.artistpin.core.model.ArtistDeletionImpact
 import dev.abhinav.artistpin.core.model.ArtistSummary
-import dev.abhinav.artistpin.core.model.Billing
 import dev.abhinav.artistpin.core.model.City
 import dev.abhinav.artistpin.core.model.CityPin
 import dev.abhinav.artistpin.core.model.ConcertEvent
-import dev.abhinav.artistpin.core.model.DataError
 import dev.abhinav.artistpin.core.model.DataResult
 import dev.abhinav.artistpin.core.model.EventSummary
 import dev.abhinav.artistpin.core.model.Venue
 import dev.abhinav.artistpin.core.model.VenuePin
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
-import java.io.IOException
-import kotlin.coroutines.coroutineContext
 import java.time.LocalDate
-import java.util.Collections
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 /** Everything the add/edit screen needs to describe one show. */
 data class EventDraft(
@@ -59,272 +34,63 @@ data class EventDraft(
     val rating: Int? = null,
 )
 
-class ConcertRepository(
-    private val concertDao: ConcertDao,
-    private val artistDao: ArtistDao,
-    private val mediaDao: MediaDao,
-    private val mediaImporter: MediaImporter,
-    private val artistImageSource: ArtistImageSource,
-    private val ioDispatcher: CoroutineDispatcher,
-) {
+/**
+ * The boundary every screen goes through. No ViewModel knows whether the shows behind it live in
+ * Room on this device or in Postgres behind an account.
+ *
+ * This was a concrete class until B6, and extracting the interface changed nothing above it — the
+ * ViewModels already depended on exactly this surface, which is the whole reason the backend
+ * migration is a swap rather than a rewrite.
+ *
+ * Two implementations: [RoomConcertRepository] (device-local, the original) and
+ * [BackendConcertRepository] (Supabase). Which one is bound is a build-time choice; see
+ * `dataModule` in `Modules.kt`.
+ */
+interface ConcertRepository {
 
-    /** Artists already looked up this session, so a null result isn't retried in a loop. */
-    private val attemptedArtistIds = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    fun observeCityPins(): Flow<List<CityPin>>
 
-    fun observeCityPins(): Flow<List<CityPin>> =
-        concertDao.observeCityPins().map { rows -> rows.map { it.toModel() } }
+    fun observeVenuePins(cityId: String): Flow<List<VenuePin>>
 
-    fun observeVenuePins(cityId: String): Flow<List<VenuePin>> =
-        concertDao.observeVenuePins(cityId).map { rows -> rows.map { it.toModel() } }
-
-    fun observeAllVenuePins(): Flow<List<VenuePin>> =
-        concertDao.observeAllVenuePins().map { rows -> rows.map { it.toModel() } }
-
-    /**
-     * Watches for artists with no artwork and fills them in as they appear. This has to be a
-     * running collection rather than a one-shot call: the map is the app's start destination, so
-     * a one-shot fires before the user has added anything and never sees artists saved later.
-     *
-     * Best-effort — a lookup that fails leaves imageUrl null and the pin falls back to initials.
-     */
-    suspend fun keepArtistArtworkFresh() = withContext(ioDispatcher) {
-        artistDao.observeArtistsWithoutProfile().collect { artists ->
-            // Artists with no portrait anywhere stay in this query forever, so without the
-            // attempted guard every emission would re-query them in a loop.
-            val pending = artists.filter { attemptedArtistIds.add(it.id) }
-            if (pending.isEmpty()) return@collect
-
-            Log.d(TAG, "Looking up artwork for ${pending.size}: ${pending.joinToString { it.name }}")
-            pending.forEach { artist ->
-                coroutineContext.ensureActive()
-                val profile = artistImageSource.profileFor(artist.name)
-                if (profile.lookupFailed) {
-                    // Leaving genres null keeps this artist in the query, so the next launch
-                    // tries again instead of caching an outage as "this artist has no genres".
-                    Log.d(TAG, "Lookup failed for '${artist.name}', will retry next launch")
-                    attemptedArtistIds.remove(artist.id)
-                    return@forEach
-                }
-                if (profile.isEmpty) Log.d(TAG, "Nothing found for '${artist.name}'")
-                // Written even when empty: the non-null genres column is what marks this artist
-                // as already looked up, so a genuine blank is never re-queried.
-                runCatching {
-                    artistDao.setProfile(
-                        artistId = artist.id,
-                        imageUrl = profile.imageUrl,
-                        genres = profile.genres.joinToString(GENRE_SEPARATOR),
-                        spotifyUrl = profile.spotifyUrl,
-                    )
-                }.onFailure { Log.w(TAG, "Could not store profile for '${artist.name}'", it) }
-            }
-        }
-    }
-
-    fun observeEventsInCity(cityId: String): Flow<List<EventSummary>> =
-        concertDao.observeEventsInCity(cityId).map { rows -> rows.map { it.toModel() } }
-
-    fun observeEventsAtVenue(venueId: String): Flow<List<EventSummary>> =
-        concertDao.observeEventsAtVenue(venueId).map { rows -> rows.map { it.toModel() } }
-
-    fun observeAllEvents(): Flow<List<EventSummary>> =
-        concertDao.observeAllEvents().map { rows -> rows.map { it.toModel() } }
-
-    fun observeEventsForArtist(artistId: String): Flow<List<EventSummary>> =
-        concertDao.observeEventsForArtist(artistId).map { rows -> rows.map { it.toModel() } }
-
-    fun observeArtistSummaries(): Flow<List<ArtistSummary>> =
-        artistDao.observeArtistSummaries().map { rows -> rows.map { it.toModel() } }
-
-    fun observeArtist(artistId: String): Flow<Artist?> =
-        artistDao.observeArtist(artistId).map { it?.toModel() }
-
-    fun observeKnownArtists(): Flow<List<Artist>> =
-        artistDao.observeAllArtists().map { list -> list.map { it.toModel() } }
-
-    fun observeKnownVenues(): Flow<List<Pair<Venue, City>>> =
-        concertDao.observeVenuesWithCity().map { list ->
-            list.map { it.venue.toModel() to it.city.toModel() }
-        }
-
-    fun observeEvent(eventId: String): Flow<ConcertEvent?> =
-        concertDao.observeEventDetails(eventId).map { details ->
-            details ?: return@map null
-            val billing = concertDao.getEventArtistRefs(eventId).associate { it.artistId to it.billing }
-            details.toModel(billing)
-        }
-
-    suspend fun saveEvent(draft: EventDraft): DataResult<String> = runCatchingData {
-        // Mirrors EventEditUiState.missingFields — the screen blocks these first, but the
-        // repository is the boundary that has to hold for any other caller too.
-        require(draft.artistNames.any { it.isNotBlank() }) { "At least one artist is required" }
-        require(draft.venueName.isNotBlank()) { "A venue name is required" }
-        require(draft.cityName.isNotBlank()) { "A city name is required" }
-        require(draft.country.isNotBlank()) { "A country is required" }
-        require(draft.latitude in VALID_LATITUDE && draft.longitude in VALID_LONGITUDE) {
-            "A valid venue location is required"
-        }
-
-        // Typing "Toronto" for a second show must land on the existing Toronto row: the unique
-        // index would make a fresh insert a silent no-op and orphan the venue's foreign key.
-        val cityName = draft.cityName.trim()
-        val country = draft.country.trim()
-        val venueName = draft.venueName.trim()
-
-        val cityId = draft.existingCityId
-            ?: concertDao.findCity(cityName, country)?.id
-            ?: newId()
-        val venueId = draft.existingVenueId
-            ?: concertDao.findVenue(venueName, cityId)?.id
-            ?: newId()
-        val eventId = draft.eventId ?: newId()
-
-        val headliners = resolveArtists(draft.artistNames)
-        val support = resolveArtists(draft.supportArtistNames)
-        artistDao.upsertArtists(headliners + support)
-
-        concertDao.saveEvent(
-            city = CityEntity(
-                id = cityId,
-                name = cityName,
-                country = country,
-                region = draft.region?.trim()?.takeIf { it.isNotEmpty() },
-            ),
-            venue = VenueEntity(
-                id = venueId,
-                name = venueName,
-                cityId = cityId,
-                latitude = draft.latitude,
-                longitude = draft.longitude,
-                address = draft.address?.trim()?.takeIf { it.isNotEmpty() },
-            ),
-            event = EventEntity(
-                id = eventId,
-                venueId = venueId,
-                dateEpochDay = draft.date.toEpochDay(),
-                title = draft.title?.trim()?.takeIf { it.isNotEmpty() },
-                notes = draft.notes?.trim()?.takeIf { it.isNotEmpty() },
-                rating = draft.rating,
-            ),
-            artistRefs = headliners.map { EventArtistCrossRef(eventId, it.id, Billing.HEADLINER) } +
-                support.map { EventArtistCrossRef(eventId, it.id, Billing.SUPPORT) },
-        )
-        artistDao.deleteOrphanArtists()
-        eventId
-    }
-
-    /** How much damage deleting an artist would do, so the UI can say so before it happens. */
-    /** Counted before the dialog opens, so it can state exactly what will be lost. */
-    suspend fun previewArtistDeletion(artistId: String): DataResult<ArtistDeletionImpact> =
-        runCatchingData {
-            ArtistDeletionImpact(
-                showsAffected = artistDao.eventCountFor(artistId),
-                showsDeleted = artistDao.eventsLeftEmptyBy(artistId),
-            )
-        }
+    fun observeAllVenuePins(): Flow<List<VenuePin>>
 
     /**
-     * Removes the artist from every show. Shows left with nobody on the bill go too, along with
-     * any venue and city that existed only for them.
+     * Long-running: watches for artists with no artwork and fills them in as they appear. Never
+     * returns under normal operation.
      */
-    suspend fun deleteArtist(artistId: String): DataResult<Unit> = runCatchingData {
-        val emptiedEventIds = concertDao.observeEventsForArtist(artistId).firstOrNull()
-            .orEmpty()
-            .map { it.id }
-        artistDao.deleteArtist(artistId)
-        artistDao.deleteEventsWithoutArtists()
-        concertDao.deleteOrphanVenues()
-        concertDao.deleteOrphanCities()
-        // Media lives on disk, so it has to be cleaned up outside the cascade.
-        emptiedEventIds.forEach { eventId ->
-            if (concertDao.getEvent(eventId) == null) mediaImporter.deleteAllForEvent(eventId)
-        }
-    }
+    suspend fun keepArtistArtworkFresh()
 
-    /**
-     * Renaming onto a name that already exists merges the two rather than failing the unique
-     * index — "deadmau5" typed twice should never become two artists.
-     */
-    suspend fun renameArtist(artistId: String, newName: String): DataResult<Unit> = runCatchingData {
-        val trimmed = newName.trim()
-        require(trimmed.isNotEmpty()) { "An artist needs a name" }
+    fun observeEventsInCity(cityId: String): Flow<List<EventSummary>>
 
-        val existing = artistDao.findByName(trimmed)
-        if (existing != null && existing.id != artistId) {
-            artistDao.reassignEvents(sourceId = artistId, targetId = existing.id)
-            artistDao.deleteArtist(artistId)
-        } else {
-            artistDao.rename(artistId, trimmed)
-        }
-    }
+    fun observeEventsAtVenue(venueId: String): Flow<List<EventSummary>>
 
-    suspend fun deleteEvent(eventId: String): DataResult<Unit> = runCatchingData {
-        concertDao.deleteEventAndPrune(eventId)
-        artistDao.deleteOrphanArtists()
-        mediaImporter.deleteAllForEvent(eventId)
-    }
+    fun observeAllEvents(): Flow<List<EventSummary>>
 
-    suspend fun addMedia(eventId: String, uris: List<Uri>): DataResult<Int> = runCatchingData {
-        val alreadyImported = mediaDao.originalUris(eventId).toSet()
-        val fresh = uris.filterNot { it.toString() in alreadyImported }
-        if (fresh.isEmpty()) return@runCatchingData 0
+    fun observeEventsForArtist(artistId: String): Flow<List<EventSummary>>
 
-        val startIndex = mediaDao.maxSortIndex(eventId) + 1
-        val imported = mediaImporter.import(eventId, fresh)
-        if (imported.isEmpty()) throw IOException("None of the selected items could be read")
+    fun observeArtistSummaries(): Flow<List<ArtistSummary>>
 
-        mediaDao.upsertMedia(
-            imported.mapIndexed { index, item ->
-                EventMediaEntity(
-                    id = newId(),
-                    eventId = eventId,
-                    localPath = item.localPath,
-                    originalUri = item.originalUri,
-                    mimeType = item.mimeType,
-                    capturedAt = item.capturedAt,
-                    sortIndex = startIndex + index,
-                )
-            },
-        )
-        imported.size
-    }
+    fun observeArtist(artistId: String): Flow<Artist?>
 
-    suspend fun removeMedia(mediaId: String, localPath: String): DataResult<Unit> = runCatchingData {
-        mediaDao.deleteMedia(mediaId)
-        mediaImporter.delete(localPath)
-    }
+    fun observeKnownArtists(): Flow<List<Artist>>
 
-    /** Reuses an existing artist row when the name matches case-insensitively, so "deadmau5" and "Deadmau5" stay one artist. */
-    private suspend fun resolveArtists(names: List<String>): List<ArtistEntity> =
-        names.map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinctBy { it.lowercase() }
-            .map { name -> artistDao.findByName(name) ?: ArtistEntity(id = newId(), name = name) }
+    fun observeKnownVenues(): Flow<List<Pair<Venue, City>>>
 
-    private fun newId() = UUID.randomUUID().toString()
+    fun observeEvent(eventId: String): Flow<ConcertEvent?>
 
-    private suspend fun <T> runCatchingData(block: suspend () -> T): DataResult<T> =
-        withContext(ioDispatcher) {
-            try {
-                DataResult.Success(block())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: IllegalArgumentException) {
-                DataResult.Failure(DataError.Validation(e.message ?: "Invalid input"))
-            } catch (e: SQLiteException) {
-                DataResult.Failure(DataError.Storage)
-            } catch (e: IOException) {
-                DataResult.Failure(DataError.MediaUnavailable)
-            } catch (e: Exception) {
-                DataResult.Failure(DataError.Unknown(e.message))
-            }
-        }
+    suspend fun saveEvent(draft: EventDraft): DataResult<String>
 
-    private companion object {
-        const val TAG = "ArtistImages"
+    /** Counted before the confirmation dialog opens, so it can say what will be lost. */
+    suspend fun previewArtistDeletion(artistId: String): DataResult<ArtistDeletionImpact>
 
-        /** Guards against NaN and out-of-range values, which SQLite stores happily but no map can render. */
-        val VALID_LATITUDE = -90.0..90.0
-        val VALID_LONGITUDE = -180.0..180.0
-    }
+    suspend fun deleteArtist(artistId: String): DataResult<Unit>
 
+    suspend fun renameArtist(artistId: String, newName: String): DataResult<Unit>
+
+    suspend fun deleteEvent(eventId: String): DataResult<Unit>
+
+    /** Returns how many items were newly imported; already-imported URIs are skipped. */
+    suspend fun addMedia(eventId: String, uris: List<Uri>): DataResult<Int>
+
+    suspend fun removeMedia(mediaId: String, localPath: String): DataResult<Unit>
 }

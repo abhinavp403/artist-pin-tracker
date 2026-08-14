@@ -26,16 +26,19 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
 
-class BackupRepository(
+class RoomBackupRepository(
     private val concertDao: ConcertDao,
     private val artistDao: ArtistDao,
     private val mediaDao: MediaDao,
     private val json: Json,
     private val ioDispatcher: CoroutineDispatcher,
     private val now: () -> Long = System::currentTimeMillis,
-) {
+) : LibraryBackup {
 
-    suspend fun export(): DataResult<String> = runCatchingBackup {
+    /** Restoring here wipes the local tables first — see [restore]. */
+    override val restoreReplaces: Boolean = true
+
+    override suspend fun export(): DataResult<String> = runCatchingBackup {
         val backup = BackupData(
             exportedAtEpochMillis = now(),
             cities = concertDao.allCities().map {
@@ -64,7 +67,7 @@ class BackupRepository(
     }
 
     /** Parsed separately from restoring so the UI can state what a file holds before replacing anything. */
-    suspend fun parse(contents: String): DataResult<BackupData> = runCatchingBackup {
+    override suspend fun parse(contents: String): DataResult<BackupData> = runCatchingBackup {
         val backup = json.decodeFromString(BackupData.serializer(), contents)
         require(backup.version <= BackupData.CURRENT_VERSION) {
             "That backup was made by a newer version of Artist Pin"
@@ -76,7 +79,7 @@ class BackupRepository(
      * Replaces everything. Deleting the cities cascades through venues, events, media and
      * cross-refs, so the insert order below has to follow the foreign keys back down.
      */
-    suspend fun restore(backup: BackupData): DataResult<Unit> = runCatchingBackup {
+    override suspend fun restore(backup: BackupData): DataResult<RestoreSummary> = runCatchingBackup {
         concertDao.deleteAllCities()
         artistDao.deleteAllArtists()
 
@@ -118,6 +121,9 @@ class BackupRepository(
                     )
                 },
         )
+        // Nothing is skipped here: this implementation wipes and rewrites, so every event in the
+        // file is applied by definition.
+        RestoreSummary(applied = backup.events.size, skipped = 0)
     }
 
     private suspend fun <T> runCatchingBackup(block: suspend () -> T): DataResult<T> =

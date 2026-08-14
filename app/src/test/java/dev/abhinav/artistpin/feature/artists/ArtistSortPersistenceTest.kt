@@ -6,6 +6,7 @@ import dev.abhinav.artistpin.core.database.ArtistPinDatabase
 import dev.abhinav.artistpin.core.media.MediaImporter
 import dev.abhinav.artistpin.core.preferences.SettingsStore
 import dev.abhinav.artistpin.data.ConcertRepository
+import dev.abhinav.artistpin.data.RoomConcertRepository
 import dev.abhinav.artistpin.data.FakeArtistImageSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
@@ -48,7 +49,7 @@ class ArtistSortPersistenceTest {
             .setQueryExecutor(testDispatcher.asExecutor())
             .setTransactionExecutor(testDispatcher.asExecutor())
             .build()
-        repository = ConcertRepository(
+        repository = RoomConcertRepository(
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),

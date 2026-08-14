@@ -10,13 +10,30 @@ import dev.abhinav.artistpin.core.preferences.DataStoreSettingsStore
 import dev.abhinav.artistpin.core.preferences.SettingsStore
 import dev.abhinav.artistpin.core.media.MediaImporter
 import dev.abhinav.artistpin.BuildConfig
+import dev.abhinav.artistpin.core.auth.AuthRepository
+import dev.abhinav.artistpin.core.auth.GoogleCredentialClient
+import dev.abhinav.artistpin.core.auth.SupabaseAuthRepository
+import dev.abhinav.artistpin.data.backend.BackendApi
+import dev.abhinav.artistpin.data.backend.SupabaseBackendApi
+import dev.abhinav.artistpin.feature.auth.SignInViewModel
+import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.postgrest.Postgrest
+import io.ktor.client.engine.okhttp.OkHttp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import dev.abhinav.artistpin.data.ArtistImageSource
-import dev.abhinav.artistpin.data.BackupRepository
+import dev.abhinav.artistpin.data.BackendBackupRepository
+import dev.abhinav.artistpin.data.LibraryBackup
+import dev.abhinav.artistpin.data.RoomBackupRepository
 import dev.abhinav.artistpin.data.CachingArtistSearch
 import dev.abhinav.artistpin.data.ChainedArtistImageSource
+import dev.abhinav.artistpin.data.BackendConcertRepository
 import dev.abhinav.artistpin.data.ConcertRepository
+import dev.abhinav.artistpin.data.RoomConcertRepository
 import dev.abhinav.artistpin.data.DeezerApi
 import dev.abhinav.artistpin.data.DiceEventLinkImporter
+import dev.abhinav.artistpin.data.LibraryMigrator
 import dev.abhinav.artistpin.data.EventLinkImporter
 import dev.abhinav.artistpin.data.DeezerArtistImageSource
 import dev.abhinav.artistpin.data.MusicBrainzApi
@@ -142,8 +159,27 @@ val dataModule = module {
     single<DeviceLocationProvider> { PlayServicesLocationProvider(androidContext(), get(IoDispatcher)) }
     single<SettingsStore> { DataStoreSettingsStore(androidContext()) }
     single { BackupFileStore(androidContext(), get(IoDispatcher)) }
-    single { BackupRepository(get(), get(), get(), json, get(IoDispatcher)) }
-    single { ConcertRepository(get(), get(), get(), get(), get(), get(IoDispatcher)) }
+    // The Room-backed one is always constructed, not just when Room is bound: the migration has
+    // to read the local library in order to upload it, so it needs this specific implementation
+    // regardless of which one the UI is talking to.
+    single { RoomBackupRepository(get(), get(), get(), json, get(IoDispatcher)) }
+    single { LibraryMigrator(get(), get(), json, get(IoDispatcher)) }
+    single<LibraryBackup> {
+        if (BuildConfig.USE_BACKEND) {
+            BackendBackupRepository(get(), json, get(IoDispatcher))
+        } else {
+            get<RoomBackupRepository>()
+        }
+    }
+    // The swap B6 exists for. Every screen depends on the ConcertRepository interface, so this
+    // single line is the whole difference between a device-local app and an account-backed one.
+    single<ConcertRepository> {
+        if (BuildConfig.USE_BACKEND) {
+            BackendConcertRepository(get(), get(), get(), get(IoDispatcher))
+        } else {
+            RoomConcertRepository(get(), get(), get(), get(), get(), get(IoDispatcher))
+        }
+    }
     single<VenueSearchService> {
         val context = androidContext()
         // Resolved lazily per call: Places is only initialized when a key is configured, and
@@ -155,7 +191,32 @@ val dataModule = module {
     }
 }
 
+val authModule = module {
+    single {
+        createSupabaseClient(
+            supabaseUrl = BuildConfig.SUPABASE_URL,
+            supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
+        ) {
+            install(Auth)
+            install(Postgrest)
+            // Reuses the app's existing OkHttp client, so Supabase shares the connection pool and
+            // timeouts rather than standing up a second HTTP stack alongside Retrofit's.
+            httpEngine = OkHttp.create { preconfigured = get<OkHttpClient>() }
+        }
+    }
+    // A single scope that outlives every screen: the session has to be observable before any
+    // ViewModel exists, because it decides whether the graph containing them is composed at all.
+    single<AuthRepository> {
+        SupabaseAuthRepository(get(), CoroutineScope(SupervisorJob() + get<CoroutineDispatcher>(DefaultDispatcher)))
+    }
+    single { GoogleCredentialClient(BuildConfig.GOOGLE_WEB_CLIENT_ID) }
+    // Declared but not yet consumed: B6 is what points ConcertRepository at it. Wiring it now
+    // means the graph verification test covers it before anything depends on it.
+    single<BackendApi> { SupabaseBackendApi(get(), get(IoDispatcher)) }
+}
+
 val viewModelModule = module {
+    viewModelOf(::SignInViewModel)
     viewModelOf(::WorldMapViewModel)
     viewModelOf(::EventDetailViewModel)
     viewModelOf(::EventEditViewModel)
@@ -163,4 +224,5 @@ val viewModelModule = module {
     viewModelOf(::ArtistDetailViewModel)
 }
 
-val appModules = listOf(dispatcherModule, databaseModule, networkModule, dataModule, viewModelModule)
+val appModules =
+    listOf(dispatcherModule, databaseModule, networkModule, authModule, dataModule, viewModelModule)

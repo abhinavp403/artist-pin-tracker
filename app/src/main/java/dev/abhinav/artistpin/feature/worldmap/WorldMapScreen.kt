@@ -56,6 +56,7 @@ interface WorldMapActions {
     fun onRestoreSourcePicked(uri: Uri)
     fun onRestoreDismissed()
     fun onRestoreConfirmed()
+    fun onUploadLibraryRequested()
 }
 
 const val CITY_ZOOM = 12f

@@ -42,7 +42,7 @@ class ConcertRepositoryTest {
             .setQueryExecutor(testDispatcher.asExecutor())
             .setTransactionExecutor(testDispatcher.asExecutor())
             .build()
-        repository = ConcertRepository(
+        repository = RoomConcertRepository(
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),
@@ -248,7 +248,7 @@ class ConcertRepositoryTest {
                 ),
             ),
         )
-        val repo = ConcertRepository(
+        val repo = RoomConcertRepository(
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),
@@ -282,7 +282,7 @@ class ConcertRepositoryTest {
                 dev.abhinav.artistpin.core.model.ArtistProfile(lookupFailed = true)
                     .also { calls++ }
         }
-        val repo = ConcertRepository(
+        val repo = RoomConcertRepository(
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),
@@ -313,7 +313,7 @@ class ConcertRepositoryTest {
             override suspend fun profileFor(artistName: String) =
                 dev.abhinav.artistpin.core.model.ArtistProfile().also { calls++ }
         }
-        val repo = ConcertRepository(
+        val repo = RoomConcertRepository(
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),

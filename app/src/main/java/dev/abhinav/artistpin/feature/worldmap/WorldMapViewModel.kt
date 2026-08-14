@@ -7,8 +7,10 @@ import dev.abhinav.artistpin.core.designsystem.toUserMessage
 import dev.abhinav.artistpin.core.location.DeviceLocationProvider
 import dev.abhinav.artistpin.core.media.BackupFileStore
 import dev.abhinav.artistpin.core.model.DataResult
-import dev.abhinav.artistpin.data.BackupRepository
+import dev.abhinav.artistpin.BuildConfig
+import dev.abhinav.artistpin.data.LibraryBackup
 import dev.abhinav.artistpin.data.ConcertRepository
+import dev.abhinav.artistpin.data.LibraryMigrator
 import java.time.LocalDate
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -23,12 +25,21 @@ import kotlinx.coroutines.launch
 
 class WorldMapViewModel(
     private val repository: ConcertRepository,
-    private val backupRepository: BackupRepository,
+    private val backupRepository: LibraryBackup,
     private val backupFileStore: BackupFileStore,
     private val locationProvider: DeviceLocationProvider,
+    private val libraryMigrator: LibraryMigrator,
 ) : ViewModel(), WorldMapActions {
 
-    private val _uiState = MutableStateFlow(WorldMapUiState())
+    private val _uiState = MutableStateFlow(
+        WorldMapUiState(
+            // Backup works either way now — it goes through LibraryBackup, which is bound to
+            // whichever store the app is reading. The migration is the only genuinely one-way
+            // action: it exists to move Room's copy up, so it disappears once that has happened.
+            showUploadAction = !BuildConfig.USE_BACKEND,
+            restoreReplaces = backupRepository.restoreReplaces,
+        ),
+    )
     val uiState: StateFlow<WorldMapUiState> = _uiState.asStateFlow()
 
     private val _effects = Channel<WorldMapEffect>(Channel.BUFFERED)
@@ -159,6 +170,30 @@ class WorldMapViewModel(
         }
     }
 
+    /**
+     * The one-time migration onto the account. Safe to press twice: the import keys on the
+     * original event ids, so a second run reports everything as already there rather than
+     * duplicating the library. Nothing local is deleted or changed.
+     */
+    override fun onUploadLibraryRequested() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(showOverflowMenu = false, isBackupRunning = true) }
+            val message = when (val result = libraryMigrator.uploadLocalLibrary()) {
+                is DataResult.Failure -> result.error.toUserMessage()
+                is DataResult.Success -> with(result.data) {
+                    when {
+                        nothingToDo -> "Nothing to upload yet"
+                        imported == 0 -> "Already up to date — $skipped shows are in your account"
+                        skipped == 0 -> "Uploaded $imported shows"
+                        else -> "Uploaded $imported shows, $skipped were already there"
+                    }
+                }
+            }
+            _uiState.update { it.copy(isBackupRunning = false) }
+            _effects.trySend(WorldMapEffect.ShowMessage(message))
+        }
+    }
+
     override fun onRestoreDismissed() = _uiState.update { it.copy(pendingRestore = null) }
 
     override fun onRestoreConfirmed() {
@@ -166,7 +201,19 @@ class WorldMapViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(pendingRestore = null, isBackupRunning = true) }
             val message = when (val result = backupRepository.restore(backup)) {
-                is DataResult.Success -> "Restored ${backup.summary.shows} shows"
+                // Reports what the restore did, not what the file held. On the merging
+                // implementation those differ constantly — restoring a backup of a library that is
+                // already intact applies nothing, and claiming otherwise would make the fail-safe
+                // untrustworthy at exactly the moment someone is checking whether it works.
+                is DataResult.Success -> with(result.data) {
+                    when {
+                        applied == 0 && skipped > 0 ->
+                            "Nothing was missing — all $skipped shows are already here"
+                        applied == 0 -> "Nothing to restore"
+                        skipped == 0 -> "Restored $applied shows"
+                        else -> "Restored $applied shows, $skipped were already here"
+                    }
+                }
                 is DataResult.Failure -> result.error.toUserMessage()
             }
             _uiState.update { it.copy(isBackupRunning = false) }

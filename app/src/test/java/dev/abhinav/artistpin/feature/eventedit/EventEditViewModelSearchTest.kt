@@ -8,6 +8,7 @@ import dev.abhinav.artistpin.core.media.MediaImporter
 import dev.abhinav.artistpin.core.model.DataError
 import dev.abhinav.artistpin.data.ArtistSuggestion
 import dev.abhinav.artistpin.data.ConcertRepository
+import dev.abhinav.artistpin.data.RoomConcertRepository
 import dev.abhinav.artistpin.data.FakeArtistImageSource
 import dev.abhinav.artistpin.data.FakeVenueSearchService
 import dev.abhinav.artistpin.core.model.DataResult
@@ -60,7 +61,7 @@ class EventEditViewModelSearchTest {
             .setQueryExecutor(testDispatcher.asExecutor())
             .setTransactionExecutor(testDispatcher.asExecutor())
             .build()
-        repository = ConcertRepository(
+        repository = RoomConcertRepository(
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),

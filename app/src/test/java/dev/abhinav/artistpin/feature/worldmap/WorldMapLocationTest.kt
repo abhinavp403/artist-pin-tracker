@@ -7,10 +7,13 @@ import dev.abhinav.artistpin.core.location.DeviceLocationProvider
 import dev.abhinav.artistpin.core.media.BackupFileStore
 import dev.abhinav.artistpin.core.media.MediaImporter
 import dev.abhinav.artistpin.core.model.Coordinates
-import dev.abhinav.artistpin.data.BackupRepository
+import dev.abhinav.artistpin.data.RoomBackupRepository
 import dev.abhinav.artistpin.data.ConcertRepository
+import dev.abhinav.artistpin.data.RoomConcertRepository
 import dev.abhinav.artistpin.data.EventDraft
 import dev.abhinav.artistpin.data.FakeArtistImageSource
+import dev.abhinav.artistpin.data.FakeBackendApi
+import dev.abhinav.artistpin.data.LibraryMigrator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -37,7 +40,7 @@ class WorldMapLocationTest {
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var database: ArtistPinDatabase
     private lateinit var repository: ConcertRepository
-    private lateinit var backups: BackupRepository
+    private lateinit var backups: RoomBackupRepository
     private lateinit var fileStore: BackupFileStore
 
     private class FakeLocationProvider(var location: Coordinates?) : DeviceLocationProvider {
@@ -57,7 +60,7 @@ class WorldMapLocationTest {
             .setQueryExecutor(testDispatcher.asExecutor())
             .setTransactionExecutor(testDispatcher.asExecutor())
             .build()
-        repository = ConcertRepository(
+        repository = RoomConcertRepository(
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),
@@ -65,7 +68,7 @@ class WorldMapLocationTest {
             artistImageSource = FakeArtistImageSource(),
             ioDispatcher = testDispatcher,
         )
-        backups = BackupRepository(
+        backups = RoomBackupRepository(
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),
@@ -82,7 +85,13 @@ class WorldMapLocationTest {
     }
 
     private fun viewModel(provider: DeviceLocationProvider) =
-        WorldMapViewModel(repository, backups, fileStore, provider)
+        WorldMapViewModel(
+            repository,
+            backups,
+            fileStore,
+            provider,
+            LibraryMigrator(backups, FakeBackendApi(), Json, testDispatcher),
+        )
 
     /**
      * Opening a venue in the dock replaced the map with the city screen. It now unfolds the

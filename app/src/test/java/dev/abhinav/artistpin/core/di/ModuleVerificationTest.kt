@@ -4,17 +4,23 @@ import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import dev.abhinav.artistpin.core.database.ArtistDao
 import dev.abhinav.artistpin.core.database.ConcertDao
+import dev.abhinav.artistpin.core.auth.AuthRepository
+import dev.abhinav.artistpin.core.auth.GoogleCredentialClient
 import dev.abhinav.artistpin.core.database.MediaDao
 import dev.abhinav.artistpin.core.location.DeviceLocationProvider
 import dev.abhinav.artistpin.core.preferences.SettingsStore
 import dev.abhinav.artistpin.data.ArtistImageSource
 import dev.abhinav.artistpin.core.media.BackupFileStore
-import dev.abhinav.artistpin.data.BackupRepository
+import dev.abhinav.artistpin.data.RoomBackupRepository
 import dev.abhinav.artistpin.data.ConcertRepository
 import dev.abhinav.artistpin.data.EventLinkImporter
+import dev.abhinav.artistpin.data.LibraryBackup
+import dev.abhinav.artistpin.data.LibraryMigrator
+import dev.abhinav.artistpin.data.backend.BackendApi
 import dev.abhinav.artistpin.data.RemoteArtistSearch
 import dev.abhinav.artistpin.data.VenueSearchService
 import kotlinx.coroutines.CoroutineDispatcher
+import okhttp3.OkHttpClient
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.koin.test.verify.verify
@@ -46,19 +52,28 @@ class ModuleVerificationTest {
                 ArtistDao::class,
                 MediaDao::class,
                 ArtistImageSource::class,
+                BackendApi::class,
                 kotlinx.serialization.json.Json::class,
             ),
+        )
+
+        authModule.verify(
+            extraTypes = listOf(OkHttpClient::class, CoroutineDispatcher::class),
         )
 
         viewModelModule.verify(
             extraTypes = listOf(
                 SavedStateHandle::class,
+                AuthRepository::class,
+                GoogleCredentialClient::class,
                 ConcertRepository::class,
                 VenueSearchService::class,
                 RemoteArtistSearch::class,
                 EventLinkImporter::class,
-                BackupRepository::class,
+                RoomBackupRepository::class,
+                LibraryBackup::class,
                 BackupFileStore::class,
+                LibraryMigrator::class,
                 DeviceLocationProvider::class,
                 SettingsStore::class,
             ),

@@ -25,6 +25,17 @@ data class WorldMapUiState(
      * camera to the pins while this is set, so the two don't animate over each other on launch.
      */
     val isLocatingUser: Boolean = true,
+    /**
+     * The one-time migration. Offered only while Room is bound, because the local library has to
+     * be readable in order to be uploaded; after the cutover there is nothing left to send.
+     */
+    val showUploadAction: Boolean = false,
+    /**
+     * Whether confirming a restore wipes the library first or merges into it. The Room and backend
+     * implementations genuinely differ, and the dialog has to say which — promising to replace
+     * when it merges is a lie, and wiping when the user expected a repair is worse.
+     */
+    val restoreReplaces: Boolean = true,
 ) {
     val isEmpty: Boolean get() = !isLoading && pins.isEmpty()
     val totalShows: Int get() = pins.sumOf { it.eventCount }
