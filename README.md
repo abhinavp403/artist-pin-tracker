@@ -14,16 +14,22 @@ happened.
   between shows.
 - **A show screen**, styled as a ticket stub, with the lineup and a photo grid pulled from your
   gallery.
-- **Backup and restore** to a JSON file, since the data lives only on the device (see
-  [`docs/architecture-plan.html`](docs/architecture-plan.html) for what changes if that stops
-  being true).
+- **An account.** Sign in with Google and your shows live in Postgres rather than on one phone.
+  Artists, venues and cities are a catalog everyone shares; your shows are yours alone, enforced
+  by row-level security rather than by the app asking nicely.
+- **Backup and restore** to a JSON file — one format that round-trips through either store, so a
+  file written before the migration restores into the account and vice versa.
+- **Photos stay on the device.** Their rows sync; the files do not, yet.
 
 ## Stack
 
 - **UI:** Jetpack Compose, Material 3, Navigation Compose
 - **DI:** Koin
-- **Persistence:** Room (SQLite), Jetpack DataStore for preferences
-- **Networking:** Retrofit + OkHttp + kotlinx.serialization
+- **Backend:** Supabase — Postgres, Auth, row-level security ([`supabase/`](supabase/))
+- **Persistence:** Supabase or Room (SQLite) behind one repository interface, Jetpack DataStore
+  for preferences
+- **Auth:** Credential Manager + Google ID tokens, via supabase-kt
+- **Networking:** Retrofit + OkHttp + kotlinx.serialization; supabase-kt for the backend
 - **Maps & places:** Google Maps Compose, Places SDK
 - **Artist metadata:** Spotify Web API (images, search), MusicBrainz (genres — Spotify dropped
   this from its public API), Deezer (portrait fallback)
@@ -37,17 +43,34 @@ Create `local.properties` in the project root (already gitignored) with:
 ```properties
 MAPS_API_KEY=your-google-maps-and-places-key
 
+# Sign-in. See supabase/README.md — GOOGLE_WEB_CLIENT_ID is the *web* OAuth client, not the
+# Android one, even though an Android client also has to exist.
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_ANON_KEY=your-publishable-anon-key
+GOOGLE_WEB_CLIENT_ID=your-web-oauth-client-id
+
+# Which store the app reads. Defaults to false (Room, device-local); set true once
+# supabase/ has been migrated and your library uploaded.
+USE_BACKEND=false
+
 # Optional — both have working defaults
 API_BASE_URL=https://your-own-proxy.vercel.app/api/
 ARTISTPIN_API_KEY=matches-ARTISTPIN_API_KEY-on-the-proxy
 ```
 
+- **Supabase URL and key:** Settings → Data API in your project. The publishable key is meant to
+  ship in the client; row-level security is what makes that safe. **Never** the service role key
+  or the database password — both bypass RLS entirely.
+- **Google sign-in** needs two OAuth clients, and the app uses the *web* one's id. Full steps,
+  and the traps, are in [`supabase/README.md`](supabase/README.md).
 - **Maps/Places key:** [Google Cloud Console](https://console.cloud.google.com/) — enable the
   Maps SDK for Android and the Places API.
 - **Spotify credentials are not needed here.** They live on the proxy in [`server/`](server/),
   never in the app. See that folder's README to run your own.
 
-The app runs without any of these set — you just won't get map tiles or venue search.
+The Maps and proxy keys are optional — without them you lose map tiles and venue search but the
+app still runs. The three sign-in values are not: every screen sits behind a session gate, so a
+build without them cannot get past the sign-in screen.
 
 ```bash
 ./gradlew :app:assembleDebug
@@ -58,19 +81,26 @@ The app runs without any of these set — you just won't get map tiles or venue 
 
 ```
 app/src/main/java/dev/abhinav/artistpin/
-├── core/            design system, database (Room), DI modules, shared models
-├── data/            repositories and third-party API clients
-├── feature/         one package per screen (home/map, artist, event, event edit)
-└── navigation/       nav graph and routes
+├── core/            design system, auth, database (Room), DI modules, shared models
+├── data/            repositories, backend client, third-party API clients
+├── feature/         one package per screen (home/map, artist, event, event edit, sign-in)
+└── navigation/      nav graph and routes
+
+supabase/            schema, RLS policies and functions — the database in version control
+server/              Vercel proxy holding the Spotify credentials
 ```
 
-`ConcertRepository` is the boundary every screen goes through — no screen talks to Room directly.
-That seam is what makes [`docs/execution-plan.md`](docs/execution-plan.md)'s backend migration a
-swap-the-implementation change rather than a rewrite.
+`ConcertRepository` is the boundary every screen goes through, and it is an interface with two
+implementations: `RoomConcertRepository` and `BackendConcertRepository`. That seam is why moving
+from one phone's SQLite to a shared Postgres changed no screen at all — the ViewModels already
+depended on exactly this surface. Which implementation is bound is decided by `USE_BACKEND` in
+`dataModule`.
 
 ## Docs
 
 - [`docs/architecture-plan.html`](docs/architecture-plan.html) — what it would take to scale this
   from one phone's local database to a real multi-user backend, with diagrams.
 - [`docs/execution-plan.md`](docs/execution-plan.md) — that plan broken into a priority-ordered,
-  code-sized backlog.
+  code-sized backlog, with what was actually built and what it cost.
+- [`supabase/README.md`](supabase/README.md) — the catalog/library split, sign-in setup, and the
+  behaviours that changed meaning once the catalog is shared.
