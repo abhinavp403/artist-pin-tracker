@@ -15,3 +15,7 @@
 local.properties
 .vercel
 .env*
+
+# Supabase project credentials — never commit
+supabase/*.rtf
+supabase/.env*
