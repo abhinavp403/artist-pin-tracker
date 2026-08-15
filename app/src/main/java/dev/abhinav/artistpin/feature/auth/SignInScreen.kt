@@ -152,6 +152,72 @@ private fun Context.findActivity(): Activity? {
 }
 
 /**
+ * Shown when the build is missing the values sign-in needs.
+ *
+ * This is a developer-facing screen, and says so plainly rather than dressing a build problem up as
+ * a user-facing error. It names the exact keys, because "something went wrong" costs an evening and
+ * "add SUPABASE_URL to local.properties" costs thirty seconds.
+ */
+@Composable
+fun ConfigurationErrorScreen(missingKeys: List<String>, warning: String? = null) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Pin.Page)
+            .systemBarsPadding()
+            .padding(horizontal = 32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "This build isn't configured",
+                color = Pin.OnPage,
+                fontSize = 20.sp,
+                style = MaterialTheme.typography.headlineSmall,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            if (missingKeys.isNotEmpty()) {
+                Text(
+                    text = "Add these to local.properties, then rebuild:",
+                    color = Pin.OnPageSecondary,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+                missingKeys.forEach { key ->
+                    Text(
+                        text = key,
+                        color = Pin.Destructive,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+
+            warning?.let {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = it,
+                    color = Pin.Destructive,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Text(
+                text = "See supabase/README.md for where each value comes from.",
+                color = Pin.OnPageTertiary,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+/**
  * Shown when a stored session exists but cannot be refreshed — no connection, or access revoked.
  *
  * The screen exists because the alternative was a bare spinner: [AuthState.Unavailable] may never

@@ -13,11 +13,14 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import dev.abhinav.artistpin.BuildConfig
 import dev.abhinav.artistpin.core.auth.AuthRepository
 import dev.abhinav.artistpin.core.auth.AuthState
+import dev.abhinav.artistpin.core.auth.BackendConfig
 import dev.abhinav.artistpin.feature.artists.ArtistDetailScreen
 import dev.abhinav.artistpin.feature.auth.AuthLoadingScreen
 import dev.abhinav.artistpin.feature.auth.AuthUnavailableScreen
+import dev.abhinav.artistpin.feature.auth.ConfigurationErrorScreen
 import dev.abhinav.artistpin.feature.auth.SignInScreen
 import dev.abhinav.artistpin.feature.eventdetail.EventDetailScreen
 import dev.abhinav.artistpin.feature.eventedit.EventEditScreen
@@ -37,6 +40,23 @@ import org.koin.compose.koinInject
  */
 @Composable
 fun ArtistPinRoot() {
+    // Checked before the koinInject below, which is what constructs the Supabase client. Past that
+    // line a missing value is somebody else's error message; before it, we can name the key.
+    val config = remember {
+        BackendConfig(
+            supabaseUrl = BuildConfig.SUPABASE_URL,
+            supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
+            googleWebClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID,
+        )
+    }
+    if (!config.isComplete) {
+        ConfigurationErrorScreen(
+            missingKeys = config.missingKeys,
+            warning = BackendConfig.urlWarningFor(config.supabaseUrl),
+        )
+        return
+    }
+
     val auth: AuthRepository = koinInject()
     val state by auth.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
