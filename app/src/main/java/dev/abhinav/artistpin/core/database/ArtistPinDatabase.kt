@@ -26,8 +26,9 @@ class Converters {
         EventEntity::class,
         EventArtistCrossRef::class,
         EventMediaEntity::class,
+        SyncOutboxEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -35,9 +36,36 @@ abstract class ArtistPinDatabase : RoomDatabase() {
     abstract fun concertDao(): ConcertDao
     abstract fun artistDao(): ArtistDao
     abstract fun mediaDao(): MediaDao
+    abstract fun syncOutboxDao(): SyncOutboxDao
 
     companion object {
         const val NAME = "artistpin.db"
+
+        /**
+         * Adds the sync queue. Purely additive — no existing table is touched, so an upgrade
+         * carries every show across untouched and simply starts with nothing queued, which is the
+         * correct state for a library that is already in step with the backend.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS sync_outbox (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        operation TEXT NOT NULL,
+                        entityId TEXT NOT NULL,
+                        payloadJson TEXT NOT NULL,
+                        queuedAtEpochMillis INTEGER NOT NULL,
+                        attempts INTEGER NOT NULL DEFAULT 0,
+                        lastError TEXT
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_sync_outbox_entityId ON sync_outbox (entityId)",
+                )
+            }
+        }
 
         /**
          * Renaming used to clear the artwork without clearing genres, which is what re-queues an

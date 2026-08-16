@@ -161,9 +161,49 @@ class MigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test.db"
+        const val TEST_DB_7 = "migration-test-7.db"
         const val TEST_DB_6 = "migration-test-6.db"
         const val TEST_DB_5 = "migration-test-5.db"
         const val TEST_DB_4 = "migration-test-4.db"
         const val TEST_DB_3 = "migration-test-3.db"
+    }
+
+    /**
+     * The sync queue lands on databases that already hold a full library. It is purely additive, so
+     * the shows have to survive untouched — a destructive fallback here would wipe every concert on
+     * the device to add an empty table.
+     */
+    @Test
+    fun `migrating to version 7 adds an empty outbox and keeps the library`() {
+        helper.createDatabase(TEST_DB_7, 6).apply {
+            execSQL("INSERT INTO cities (id, name, country) VALUES ('c1', 'Queens', 'US')")
+            execSQL(
+                "INSERT INTO venues (id, name, cityId, latitude, longitude) " +
+                    "VALUES ('v1', 'Knockdown Center', 'c1', 40.71, -73.92)",
+            )
+            execSQL(
+                "INSERT INTO events (id, venueId, dateEpochDay) VALUES ('e1', 'v1', 20253)",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB_7,
+            7,
+            true,
+            ArtistPinDatabase.MIGRATION_6_7,
+        )
+
+        db.query("SELECT COUNT(*) FROM events").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(1, cursor.getInt(0))
+        }
+        // An upgrading device is already in step with the backend, so starting with anything
+        // queued would replay changes the server has had for months.
+        db.query("SELECT COUNT(*) FROM sync_outbox").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        db.close()
     }
 }

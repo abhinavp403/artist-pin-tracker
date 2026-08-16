@@ -125,6 +125,31 @@ data class EventMediaEntity(
     val sortIndex: Int = 0,
 )
 
+/**
+ * One local change waiting to reach the backend.
+ *
+ * The queue exists so a save never depends on the network: the write lands in Room, a row lands
+ * here, and the screen returns. Whether the phone has signal is then somebody else's problem.
+ *
+ * Payloads carry *names*, not local ids, for anything in the shared catalog. A venue or artist
+ * created offline has a Room id the server has never seen — the catalog is deduplicated server-side
+ * by name, so the id cannot be guessed locally. Replaying by name lets `save_event` do its
+ * find-or-create as though the show had been added online.
+ */
+@Entity(tableName = "sync_outbox", indices = [Index("entityId")])
+data class SyncOutboxEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** A [dev.abhinav.artistpin.data.sync.SyncOperation] name. */
+    val operation: String,
+    /** The event or artist this entry concerns, used to supersede earlier entries for the same thing. */
+    val entityId: String,
+    val payloadJson: String,
+    val queuedAtEpochMillis: Long,
+    /** Counted so a permanently poisonous entry can be spotted rather than retried forever. */
+    val attempts: Int = 0,
+    val lastError: String? = null,
+)
+
 data class VenueWithCity(
     @Embedded val venue: VenueEntity,
     @Relation(parentColumn = "cityId", entityColumn = "id") val city: CityEntity,
