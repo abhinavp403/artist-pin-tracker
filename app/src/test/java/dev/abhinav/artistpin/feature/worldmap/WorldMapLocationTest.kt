@@ -14,6 +14,7 @@ import dev.abhinav.artistpin.data.EventDraft
 import dev.abhinav.artistpin.data.FakeArtistImageSource
 import dev.abhinav.artistpin.data.FakeBackendApi
 import dev.abhinav.artistpin.data.LibraryMigrator
+import dev.abhinav.artistpin.data.sync.LibrarySync
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -69,6 +70,7 @@ class WorldMapLocationTest {
             ioDispatcher = testDispatcher,
         )
         backups = RoomBackupRepository(
+            database = database,
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),
@@ -91,6 +93,13 @@ class WorldMapLocationTest {
             fileStore,
             provider,
             LibraryMigrator(backups, FakeBackendApi(), Json, testDispatcher),
+            LibrarySync(
+                outbox = database.syncOutboxDao(),
+                api = FakeBackendApi(),
+                localBackup = backups,
+                json = Json,
+                ioDispatcher = testDispatcher,
+            ),
         )
 
     /**

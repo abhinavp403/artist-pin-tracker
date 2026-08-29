@@ -11,6 +11,7 @@ import dev.abhinav.artistpin.BuildConfig
 import dev.abhinav.artistpin.data.LibraryBackup
 import dev.abhinav.artistpin.data.ConcertRepository
 import dev.abhinav.artistpin.data.LibraryMigrator
+import dev.abhinav.artistpin.data.sync.LibrarySync
 import java.time.LocalDate
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,6 +30,7 @@ class WorldMapViewModel(
     private val backupFileStore: BackupFileStore,
     private val locationProvider: DeviceLocationProvider,
     private val libraryMigrator: LibraryMigrator,
+    private val librarySync: LibrarySync,
 ) : ViewModel(), WorldMapActions {
 
     private val _uiState = MutableStateFlow(
@@ -37,6 +39,7 @@ class WorldMapViewModel(
             // whichever store the app is reading. The migration is the only genuinely one-way
             // action: it exists to move Room's copy up, so it disappears once that has happened.
             showUploadAction = !BuildConfig.USE_BACKEND,
+            showSyncAction = BuildConfig.USE_BACKEND,
             restoreReplaces = backupRepository.restoreReplaces,
         ),
     )
@@ -66,6 +69,11 @@ class WorldMapViewModel(
         }
         // Runs for as long as the map is alive, so shows added later get artwork too.
         viewModelScope.launch { repository.keepArtistArtworkFresh() }
+        viewModelScope.launch {
+            librarySync.pendingCount.collect { count ->
+                _uiState.update { it.copy(pendingSyncCount = count) }
+            }
+        }
         viewModelScope.launch {
             repository.observeCityPins().collect { pins ->
                 _uiState.update { state ->
@@ -190,6 +198,30 @@ class WorldMapViewModel(
                 }
             }
             _uiState.update { it.copy(isBackupRunning = false) }
+            _effects.trySend(WorldMapEffect.ShowMessage(message))
+        }
+    }
+
+    /**
+     * Sync on demand. The worker already runs when connectivity returns, so this exists for the
+     * case the worker cannot help with: standing somewhere with signal, wanting to know *now*
+     * whether the shows made it, rather than trusting that they will.
+     */
+    override fun onSyncNowRequested() {
+        if (_uiState.value.isSyncing) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(showOverflowMenu = false, isSyncing = true) }
+            val message = when (val result = librarySync.syncNow()) {
+                is DataResult.Failure -> result.error.toUserMessage()
+                is DataResult.Success -> with(result.data) {
+                    when {
+                        !isFullySynced -> "$stillPending change(s) still waiting — will retry"
+                        pushed > 0 -> "Synced $pushed change(s)"
+                        else -> "Everything is up to date"
+                    }
+                }
+            }
+            _uiState.update { it.copy(isSyncing = false) }
             _effects.trySend(WorldMapEffect.ShowMessage(message))
         }
     }

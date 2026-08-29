@@ -2,6 +2,7 @@ package dev.abhinav.artistpin.navigation
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,7 @@ import dev.abhinav.artistpin.feature.auth.SignInScreen
 import dev.abhinav.artistpin.feature.eventdetail.EventDetailScreen
 import dev.abhinav.artistpin.feature.eventedit.EventEditScreen
 import dev.abhinav.artistpin.feature.home.HomeScreen
+import dev.abhinav.artistpin.data.sync.LibrarySync
 import dev.abhinav.artistpin.feature.home.rememberHomeState
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -83,9 +85,16 @@ fun ArtistPinRoot() {
             onSignOut = { scope.launch { auth.signOut() } },
         )
 
-        is AuthState.SignedIn -> ArtistPinApp(
-            onSignOut = { scope.launch { auth.signOut() } },
-        )
+        is AuthState.SignedIn -> {
+            // Sync on entry, once per signed-in session. Deliberately fire-and-forget: nothing on
+            // screen waits for it, because the whole point of the outbox is that the library is
+            // already readable and writable before the network is consulted. C3 moves this to
+            // WorkManager so it also runs when connectivity returns rather than only at launch.
+            val sync: LibrarySync = koinInject()
+            LaunchedEffect(Unit) { sync.syncNow() }
+
+            ArtistPinApp(onSignOut = { scope.launch { auth.signOut() } })
+        }
     }
 }
 

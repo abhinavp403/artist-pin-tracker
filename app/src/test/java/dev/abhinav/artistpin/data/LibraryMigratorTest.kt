@@ -58,6 +58,7 @@ class LibraryMigratorTest {
             ioDispatcher = testDispatcher,
         )
         val backups = RoomBackupRepository(
+            database = database,
             concertDao = database.concertDao(),
             artistDao = database.artistDao(),
             mediaDao = database.mediaDao(),

@@ -84,6 +84,15 @@ interface BackendApi {
 
     suspend fun deleteEvent(eventId: String)
 
+    /**
+     * The catalog id for a name, creating the row if nobody has used that spelling yet.
+     *
+     * Needed by the sync replay: a queued rename or delete carries the artist's *name*, because the
+     * local Room id of an artist created offline means nothing to a catalog that deduplicates by
+     * name. This is how that name becomes an id the server recognises.
+     */
+    suspend fun findOrCreateArtist(name: String): String
+
     /** Returns the id of the artist the caller's shows now point at, which may be a different row. */
     suspend fun renameArtist(artistId: String, newName: String): String
 

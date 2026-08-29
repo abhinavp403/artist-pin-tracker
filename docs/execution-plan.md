@@ -320,20 +320,75 @@ column would collapse NULL and `'{}'` together into a permanent lookup loop.
 
 Blocked on Milestone B shipping — there's nothing to sync to until B6 exists.
 
-- [ ] **C1. Reintroduce Room as a cache**, not the source of truth: same `ArtistPinDatabase` schema, but every
+- [x] **C1. Reintroduce Room as a cache**, not the source of truth: same `ArtistPinDatabase` schema, but every
   write also enqueues a row in a new `sync_outbox` table (`event_id`, `operation`, `payload_json`, `synced_at`).
-- [ ] **C2. `onSave()` in `EventEditViewModel` writes to Room first, then returns immediately** — the network
+- [x] **C2. `onSave()` in `EventEditViewModel` writes to Room first, then returns immediately** — the network
   call moves off the save's critical path entirely, matching fig. 3 in the architecture doc.
-- [ ] **C3. A `WorkManager` job (or foreground sync coroutine) that drains the outbox** whenever connectivity
+- [x] **C3. A `WorkManager` job (or foreground sync coroutine) that drains the outbox** whenever connectivity
   returns, calling B6's backend-backed repository methods and marking rows synced on success.
-- [ ] **C4. Conflict policy: last-write-wins per `event_id`.** Concerts aren't collaboratively edited, so no
+- [x] **C4. Conflict policy: last-write-wins per `event_id`.** Concerts aren't collaboratively edited, so no
   CRDT or operational-transform machinery is needed — document this explicitly so a future contributor
   doesn't over-engineer it.
-- [ ] **C5. Surface sync state in the UI** — a small indicator (dock overflow menu is the natural spot,
+- [x] **C5. Surface sync state in the UI** — a small indicator (dock overflow menu is the natural spot,
   next to the existing backup/restore items) showing "3 shows waiting to sync" when offline.
 
 **Exit condition:** adding a show in a venue with no signal behaves exactly as it does today; it appears on
 other devices once the phone reconnects.
+
+**Status — C1, C2 and C4 written; C3 and C5 outstanding; not yet run on a device.**
+`OfflineFirstConcertRepository` reads from Room and writes through it, queueing each change in a new
+`sync_outbox` table (schema v7, migration 6→7, purely additive). `LibrarySync` drains the queue and then
+pulls. 206 tests pass.
+
+**The Flows are real again.** Room tells us when a table changed, so the refresh-trigger machinery
+`BackendConcertRepository` had to invent is gone, and the map no longer blanks without signal.
+
+**Sync model: push the outbox, pull by whole-library refresh.** The alternative — incremental two-way
+sync — founders on identity: a venue created offline has a Room id the shared catalog has never seen,
+because the catalog deduplicates by *name*, server-side. Merging incrementally would need an id-mapping
+table, tombstones for deletes, and per-row merge rules. A full refresh (`export_backup` into the existing
+restore path) sidesteps all of it, and leaves Room holding the *server's* ids so both sides agree by
+construction. It costs a whole-library download — negligible at this size, worth revisiting in the
+thousands of shows.
+
+Two rules the tests pin down, because both fail silently rather than loudly:
+
+- **A pull only ever runs with an empty outbox.** Refreshing over queued work would overwrite it with the
+  server's older copy and destroy the very change waiting to be sent.
+- **A failed push stops the drain rather than skipping past it.** The queue is ordered, and later entries
+  assume earlier ones landed — an edit to a show whose creation never sent would simply be rejected.
+
+**Queue entries supersede rather than accumulate.** Each payload is the complete draft, so editing one show
+five times offline sends one save. Deleting a show drops everything queued for it, including its own
+creation, rather than replaying a show only to delete it a moment later.
+
+**`save_event` had to change** (`0009_save_event_upsert.sql`). A non-null event id used to mean "update this
+existing row", but an offline save already has an id by the time it reaches the server — so every show
+created offline would have failed to sync permanently while looking fine on the phone. The id is now just
+the id: insert if new, update if ours, refuse if it belongs to someone else. That is also what makes replay
+idempotent after an ambiguous failure.
+
+**Media rows sync too**, though the files still do not. Without that, a full refresh would wipe local media
+rows the server had never been told about.
+
+**C3 and C5 are in.** `WorkManagerSyncScheduler` enqueues unique work constrained to `NetworkType.CONNECTED`,
+which is the part that matters: sync used to run once when the signed-in graph composed, so a show added
+underground stayed queued until the *next* launch even if the phone regained signal while the app sat open.
+The worker now waits for connectivity and runs, including after the process has died.
+
+Deliberate choices in the worker: `ExistingWorkPolicy.KEEP` rather than REPLACE, because work already
+waiting drains the whole queue anyway and REPLACE would discard the accumulated backoff of a failing
+request; exponential backoff from 30s; and `Result.retry()` when the queue is only partly drained, since
+the drain stops at the first failure and a partial queue is a normal outcome rather than a finished one.
+A non-network failure returns `failure()` — it will fail identically next time, so retrying it burns
+battery for nothing.
+
+The indicator states the backlog — "3 changes waiting to sync" — rather than a status word. That answers
+the question someone actually has after adding shows with no signal; a tick does not. Tapping it syncs on
+demand, for the case the worker cannot help with: standing somewhere with signal and wanting to know now.
+`SyncScheduler` is an interface with a no-op implementation on the device-only build, which also keeps the
+repository testable without WorkManager.
+
 
 ---
 

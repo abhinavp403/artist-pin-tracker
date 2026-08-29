@@ -79,13 +79,33 @@ class FakeBackendApi : BackendApi {
 
     override suspend fun mediaFor(eventId: String): List<EventMediaDto> = read(emptyList())
 
+    /** Fails the next saveEvent and then clears — models a drop mid-drain. */
+    var failNextSave: Exception? = null
+
     override suspend fun saveEvent(params: SaveEventParams): String {
+        failNextSave?.let { failNextSave = null; throw it }
         savedParams = params
         saveCallCount++
         return params.eventId ?: "generated-event-id"
     }
 
-    override suspend fun deleteEvent(eventId: String) = Unit
+    /** Event ids whose delete is refused, standing in for the server rejecting an unknown event. */
+    var failDeleteEventFor: MutableSet<String> = mutableSetOf()
+    val deletedEventIds = mutableListOf<String>()
+
+    override suspend fun deleteEvent(eventId: String) {
+        if (eventId in failDeleteEventFor) throw IllegalStateException("no such event")
+        deletedEventIds += eventId
+    }
+
+    /** Names the sync asked the catalog to resolve, in order. */
+    val findOrCreateCalls = mutableListOf<String>()
+
+    override suspend fun findOrCreateArtist(name: String): String {
+        findOrCreateCalls += name
+        failNextRead?.let { failNextRead = null; throw it }
+        return "catalog-id-for-${name.lowercase()}"
+    }
 
     override suspend fun renameArtist(artistId: String, newName: String): String {
         renamedTo = artistId to newName

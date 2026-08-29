@@ -30,7 +30,12 @@ import dev.abhinav.artistpin.data.CachingArtistSearch
 import dev.abhinav.artistpin.data.ChainedArtistImageSource
 import dev.abhinav.artistpin.data.BackendConcertRepository
 import dev.abhinav.artistpin.data.ConcertRepository
+import dev.abhinav.artistpin.data.OfflineFirstConcertRepository
 import dev.abhinav.artistpin.data.RoomConcertRepository
+import dev.abhinav.artistpin.data.sync.LibrarySync
+import dev.abhinav.artistpin.data.sync.NoSyncScheduler
+import dev.abhinav.artistpin.data.sync.SyncScheduler
+import dev.abhinav.artistpin.data.sync.WorkManagerSyncScheduler
 import dev.abhinav.artistpin.data.DeezerApi
 import dev.abhinav.artistpin.data.DiceEventLinkImporter
 import dev.abhinav.artistpin.data.LibraryMigrator
@@ -80,11 +85,13 @@ val databaseModule = module {
             ArtistPinDatabase.MIGRATION_2_3,
             ArtistPinDatabase.MIGRATION_3_4,
             ArtistPinDatabase.MIGRATION_4_5,
-            ArtistPinDatabase.MIGRATION_5_6).build()
+            ArtistPinDatabase.MIGRATION_5_6,
+            ArtistPinDatabase.MIGRATION_6_7).build()
     }
     single { get<ArtistPinDatabase>().concertDao() }
     single { get<ArtistPinDatabase>().artistDao() }
     single { get<ArtistPinDatabase>().mediaDao() }
+    single { get<ArtistPinDatabase>().syncOutboxDao() }
 }
 
 val networkModule = module {
@@ -162,7 +169,7 @@ val dataModule = module {
     // The Room-backed one is always constructed, not just when Room is bound: the migration has
     // to read the local library in order to upload it, so it needs this specific implementation
     // regardless of which one the UI is talking to.
-    single { RoomBackupRepository(get(), get(), get(), json, get(IoDispatcher)) }
+    single { RoomBackupRepository(get(), get(), get(), get(), json, get(IoDispatcher)) }
     single { LibraryMigrator(get(), get(), json, get(IoDispatcher)) }
     single<LibraryBackup> {
         if (BuildConfig.USE_BACKEND) {
@@ -173,13 +180,22 @@ val dataModule = module {
     }
     // The swap B6 exists for. Every screen depends on the ConcertRepository interface, so this
     // single line is the whole difference between a device-local app and an account-backed one.
+    // Room is constructed either way: with the backend bound it is the offline-first cache the
+    // repository reads from and writes through, not a disused alternative.
+    single { RoomConcertRepository(get(), get(), get(), get(), get(), get(IoDispatcher)) }
+    single<SyncScheduler> {
+        // Nothing to sync to on the device-only build, so the scheduler is a no-op rather than a
+        // worker that would wake up, find no backend and fail.
+        if (BuildConfig.USE_BACKEND) WorkManagerSyncScheduler(androidContext()) else NoSyncScheduler
+    }
     single<ConcertRepository> {
         if (BuildConfig.USE_BACKEND) {
-            BackendConcertRepository(get(), get(), get(), get(IoDispatcher))
+            OfflineFirstConcertRepository(get(), get(), get(), json, get())
         } else {
-            RoomConcertRepository(get(), get(), get(), get(), get(), get(IoDispatcher))
+            get<RoomConcertRepository>()
         }
     }
+    single { LibrarySync(get(), get(), get(), json, get(IoDispatcher)) }
     single<VenueSearchService> {
         val context = androidContext()
         // Resolved lazily per call: Places is only initialized when a key is configured, and

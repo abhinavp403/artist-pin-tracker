@@ -47,6 +47,8 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
@@ -331,6 +333,10 @@ fun HomeScreen(
                 onRestore = mapViewModel::onRestoreRequested,
                 showUploadAction = uiState.showUploadAction,
                 onUploadLibrary = mapViewModel::onUploadLibraryRequested,
+                showSyncAction = uiState.showSyncAction,
+                pendingSyncCount = uiState.pendingSyncCount,
+                isSyncing = uiState.isSyncing,
+                onSyncNow = mapViewModel::onSyncNowRequested,
                 onSignOut = {
                     mapViewModel.onOverflowDismiss()
                     onSignOut()
@@ -407,6 +413,10 @@ private fun TopChrome(
     onRestore: () -> Unit,
     showUploadAction: Boolean,
     onUploadLibrary: () -> Unit,
+    showSyncAction: Boolean,
+    pendingSyncCount: Int,
+    isSyncing: Boolean,
+    onSyncNow: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -458,6 +468,33 @@ private fun TopChrome(
                         text = { Text("Copy my shows to my account") },
                         onClick = onUploadLibrary,
                         leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
+                    )
+                }
+                if (showSyncAction) {
+                    DropdownMenuItem(
+                        // States the backlog rather than a status word. "3 shows waiting to sync"
+                        // answers the question someone actually has after adding shows with no
+                        // signal; "Synced" or a tick does not.
+                        text = {
+                            Text(
+                                when {
+                                    isSyncing -> "Syncing…"
+                                    pendingSyncCount == 0 -> "Everything is synced"
+                                    pendingSyncCount == 1 -> "1 change waiting to sync"
+                                    else -> "$pendingSyncCount changes waiting to sync"
+                                },
+                            )
+                        },
+                        onClick = onSyncNow,
+                        enabled = !isSyncing,
+                        leadingIcon = {
+                            Icon(
+                                if (pendingSyncCount == 0) Icons.Default.CloudDone
+                                else Icons.Default.CloudQueue,
+                                contentDescription = null,
+                                tint = if (pendingSyncCount == 0) Pin.OnChromeSecondary else Pin.Accent,
+                            )
+                        },
                     )
                 }
                 HorizontalDivider()

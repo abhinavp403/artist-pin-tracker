@@ -1,7 +1,9 @@
 package dev.abhinav.artistpin.data
 
 import android.database.sqlite.SQLiteException
+import androidx.room.withTransaction
 import dev.abhinav.artistpin.core.database.ArtistDao
+import dev.abhinav.artistpin.core.database.ArtistPinDatabase
 import dev.abhinav.artistpin.core.database.ArtistEntity
 import dev.abhinav.artistpin.core.database.CityEntity
 import dev.abhinav.artistpin.core.database.ConcertDao
@@ -27,6 +29,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 class RoomBackupRepository(
+    private val database: ArtistPinDatabase,
     private val concertDao: ConcertDao,
     private val artistDao: ArtistDao,
     private val mediaDao: MediaDao,
@@ -78,8 +81,19 @@ class RoomBackupRepository(
     /**
      * Replaces everything. Deleting the cities cascades through venues, events, media and
      * cross-refs, so the insert order below has to follow the foreign keys back down.
+     *
+     * One transaction, start to finish.
+     *
+     * Without it Room's invalidation tracker fires between the wipe and the re-insert, so every
+     * open observer briefly sees an empty library. That was tolerable when a restore was a rare,
+     * deliberate act — it is not now that Milestone C's sync runs this on every pull, which would
+     * mean the map blanking and repopulating each time a show is saved.
      */
     override suspend fun restore(backup: BackupData): DataResult<RestoreSummary> = runCatchingBackup {
+        database.withTransaction { restoreWithin(backup) }
+    }
+
+    private suspend fun restoreWithin(backup: BackupData): RestoreSummary {
         concertDao.deleteAllCities()
         artistDao.deleteAllArtists()
 
@@ -123,7 +137,7 @@ class RoomBackupRepository(
         )
         // Nothing is skipped here: this implementation wipes and rewrites, so every event in the
         // file is applied by definition.
-        RestoreSummary(applied = backup.events.size, skipped = 0)
+        return RestoreSummary(applied = backup.events.size, skipped = 0)
     }
 
     private suspend fun <T> runCatchingBackup(block: suspend () -> T): DataResult<T> =

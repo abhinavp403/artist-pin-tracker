@@ -36,6 +36,15 @@ data class WorldMapUiState(
      * when it merges is a lie, and wiping when the user expected a repair is worse.
      */
     val restoreReplaces: Boolean = true,
+    /**
+     * Changes written locally but not yet accepted by the backend. Surfaced because otherwise
+     * offline-first is indistinguishable from data loss: a show added underground is saved, and the
+     * user has no way to know whether it got anywhere.
+     */
+    val pendingSyncCount: Int = 0,
+    val isSyncing: Boolean = false,
+    /** False on the device-only build, where there is nothing to sync to. */
+    val showSyncAction: Boolean = false,
 ) {
     val isEmpty: Boolean get() = !isLoading && pins.isEmpty()
     val totalShows: Int get() = pins.sumOf { it.eventCount }

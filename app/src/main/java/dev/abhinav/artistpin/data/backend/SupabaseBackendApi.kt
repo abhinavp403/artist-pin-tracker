@@ -123,6 +123,13 @@ class SupabaseBackendApi(
         Unit
     }
 
+    override suspend fun findOrCreateArtist(name: String): String = io {
+        client.postgrest.rpc(
+            FIND_OR_CREATE_ARTIST,
+            buildJsonObject { put("p_name", JsonPrimitive(name)) },
+        ).decodeAs()
+    }
+
     override suspend fun renameArtist(artistId: String, newName: String): String = io {
         client.postgrest.rpc(
             RENAME_ARTIST,
@@ -163,7 +170,12 @@ class SupabaseBackendApi(
     }
 
     override suspend fun addMedia(rows: List<EventMediaDto>) = io {
-        client.postgrest.from(EVENT_MEDIA).insert(rows)
+        // upsert, not insert. The sync queue re-sends every media row for an event, so rows that
+        // already reached the server arrive again on the next photo — a plain insert collides on
+        // the primary key, and because the drain stops at the first failure that one conflict
+        // blocks the whole outbox permanently. Ignoring duplicates makes the replay idempotent,
+        // which is what a queue that can be retried needs.
+        client.postgrest.from(EVENT_MEDIA).upsert(rows) { ignoreDuplicates = true }
         Unit
     }
 
@@ -209,6 +221,7 @@ class SupabaseBackendApi(
         const val PREVIEW_ARTIST_DELETION = "preview_artist_deletion"
         const val DELETE_ARTIST = "delete_artist"
         const val SET_ARTIST_PROFILE = "catalog_set_artist_profile"
+        const val FIND_OR_CREATE_ARTIST = "catalog_find_or_create_artist"
         const val IMPORT_BACKUP = "import_backup"
         const val EXPORT_BACKUP = "export_backup"
     }

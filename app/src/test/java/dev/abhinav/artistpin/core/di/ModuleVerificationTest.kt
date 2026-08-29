@@ -3,10 +3,12 @@ package dev.abhinav.artistpin.core.di
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import dev.abhinav.artistpin.core.database.ArtistDao
+import dev.abhinav.artistpin.core.database.ArtistPinDatabase
 import dev.abhinav.artistpin.core.database.ConcertDao
 import dev.abhinav.artistpin.core.auth.AuthRepository
 import dev.abhinav.artistpin.core.auth.GoogleCredentialClient
 import dev.abhinav.artistpin.core.database.MediaDao
+import dev.abhinav.artistpin.core.database.SyncOutboxDao
 import dev.abhinav.artistpin.core.location.DeviceLocationProvider
 import dev.abhinav.artistpin.core.preferences.SettingsStore
 import dev.abhinav.artistpin.data.ArtistImageSource
@@ -16,6 +18,7 @@ import dev.abhinav.artistpin.data.ConcertRepository
 import dev.abhinav.artistpin.data.EventLinkImporter
 import dev.abhinav.artistpin.data.LibraryBackup
 import dev.abhinav.artistpin.data.LibraryMigrator
+import dev.abhinav.artistpin.data.sync.LibrarySync
 import dev.abhinav.artistpin.data.backend.BackendApi
 import dev.abhinav.artistpin.data.RemoteArtistSearch
 import dev.abhinav.artistpin.data.VenueSearchService
@@ -51,8 +54,11 @@ class ModuleVerificationTest {
                 ConcertDao::class,
                 ArtistDao::class,
                 MediaDao::class,
+                SyncOutboxDao::class,
                 ArtistImageSource::class,
                 BackendApi::class,
+                ArtistPinDatabase::class,
+                RoomBackupRepository::class,
                 kotlinx.serialization.json.Json::class,
             ),
         )
@@ -74,6 +80,7 @@ class ModuleVerificationTest {
                 LibraryBackup::class,
                 BackupFileStore::class,
                 LibraryMigrator::class,
+                LibrarySync::class,
                 DeviceLocationProvider::class,
                 SettingsStore::class,
             ),
