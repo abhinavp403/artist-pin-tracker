@@ -41,6 +41,10 @@ interface SyncOutboxDao {
     @Query("DELETE FROM sync_outbox WHERE entityId = :entityId")
     suspend fun removeAllFor(entityId: String)
 
+    /** Whether something is already queued for this thing, so the backfill does not re-queue it. */
+    @Query("SELECT COUNT(*) FROM sync_outbox WHERE entityId = :entityId AND operation = :operation")
+    suspend fun countFor(entityId: String, operation: String): Int
+
     @Query("UPDATE sync_outbox SET attempts = attempts + 1, lastError = :error WHERE id = :id")
     suspend fun recordFailure(id: Long, error: String?)
 

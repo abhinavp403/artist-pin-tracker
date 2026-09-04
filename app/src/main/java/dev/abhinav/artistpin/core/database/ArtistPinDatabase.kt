@@ -28,7 +28,7 @@ class Converters {
         EventMediaEntity::class,
         SyncOutboxEntity::class,
     ],
-    version = 7,
+    version = 9,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -40,6 +40,29 @@ abstract class ArtistPinDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "artistpin.db"
+
+        /**
+         * Records how often a photo's upload has been abandoned, so one that can never be sent
+         * stops being retried. Defaults to zero, which correctly describes every existing row.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE event_media ADD COLUMN uploadAttempts INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
+        /**
+         * Adds the object-storage path to media rows. Additive and nullable: every existing photo
+         * starts with no remote copy, which is exactly true of them, and the backfill picks them
+         * up from there.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE event_media ADD COLUMN remotePath TEXT")
+            }
+        }
 
         /**
          * Adds the sync queue. Purely additive — no existing table is touched, so an upgrade

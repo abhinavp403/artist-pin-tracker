@@ -123,6 +123,24 @@ data class EventMediaEntity(
     val mimeType: String,
     val capturedAt: Long? = null,
     val sortIndex: Int = 0,
+    /**
+     * Where the file lives in object storage, once it has got there. Null is the normal state for a
+     * photo just added — it is the backlog the sync works through, and the reason a row can exist
+     * while the bytes are still only on this phone.
+     *
+     * A path, not a URL: signed URLs expire, so storing one would mean storing something that stops
+     * working.
+     */
+    val remotePath: String? = null,
+    /**
+     * How many times uploading this file has been abandoned.
+     *
+     * Exists because "has no remote path" is not the same as "should be uploaded". Without it the
+     * backfill re-queues a photo that can never be sent on every single sync — and worse, it
+     * regenerates the very entry the outbox just gave up on, defeating that escape hatch. Once this
+     * reaches its limit the row is left alone: still shown, still yours, simply not retried.
+     */
+    val uploadAttempts: Int = 0,
 )
 
 /**
