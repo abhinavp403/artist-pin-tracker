@@ -57,6 +57,7 @@ fun EventMediaEntity.toModel() = EventMedia(
     mimeType = mimeType,
     capturedAt = capturedAt,
     sortIndex = sortIndex,
+    remotePath = remotePath,
 )
 
 fun CityPinRow.toModel() = CityPin(

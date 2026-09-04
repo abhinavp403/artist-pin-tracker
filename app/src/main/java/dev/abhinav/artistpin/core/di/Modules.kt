@@ -9,6 +9,7 @@ import dev.abhinav.artistpin.core.media.BackupFileStore
 import dev.abhinav.artistpin.core.preferences.DataStoreSettingsStore
 import dev.abhinav.artistpin.core.preferences.SettingsStore
 import dev.abhinav.artistpin.core.media.MediaImporter
+import dev.abhinav.artistpin.core.media.MediaUrlResolver
 import dev.abhinav.artistpin.BuildConfig
 import dev.abhinav.artistpin.core.auth.AuthRepository
 import dev.abhinav.artistpin.core.auth.GoogleCredentialClient
@@ -86,7 +87,9 @@ val databaseModule = module {
             ArtistPinDatabase.MIGRATION_3_4,
             ArtistPinDatabase.MIGRATION_4_5,
             ArtistPinDatabase.MIGRATION_5_6,
-            ArtistPinDatabase.MIGRATION_6_7).build()
+            ArtistPinDatabase.MIGRATION_6_7,
+            ArtistPinDatabase.MIGRATION_7_8,
+            ArtistPinDatabase.MIGRATION_8_9).build()
     }
     single { get<ArtistPinDatabase>().concertDao() }
     single { get<ArtistPinDatabase>().artistDao() }
@@ -163,6 +166,7 @@ private const val MUSICBRAINZ_BASE_URL = "https://musicbrainz.org/"
 
 val dataModule = module {
     single { MediaImporter(androidContext(), get(IoDispatcher)) }
+    single { MediaUrlResolver(get(), get(IoDispatcher)) }
     single<DeviceLocationProvider> { PlayServicesLocationProvider(androidContext(), get(IoDispatcher)) }
     single<SettingsStore> { DataStoreSettingsStore(androidContext()) }
     single { BackupFileStore(androidContext(), get(IoDispatcher)) }
@@ -195,7 +199,7 @@ val dataModule = module {
             get<RoomConcertRepository>()
         }
     }
-    single { LibrarySync(get(), get(), get(), json, get(IoDispatcher)) }
+    single { LibrarySync(get(), get(), get(), get(), get(), json, get(IoDispatcher)) }
     single<VenueSearchService> {
         val context = androidContext()
         // Resolved lazily per call: Places is only initialized when a key is configured, and

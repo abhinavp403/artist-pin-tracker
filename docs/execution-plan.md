@@ -396,18 +396,54 @@ repository testable without WorkManager.
 
 Independent of C — can be built in parallel once B ships.
 
-- [ ] **D1. Replace `MediaImporter`'s local-copy behavior** with a presigned-upload flow: request an upload
+- [x] **D1. Replace `MediaImporter`'s local-copy behavior** with a presigned-upload flow: request an upload
   URL from the backend, `PUT` the file directly to object storage, store the resulting URL instead of a
   local file path.
 - [ ] **D2. Thumbnailing** — either client-side before upload (cheap, works today) or a backend job
   triggered on upload (better for consistent thumbnail sizes across devices).
 - [ ] **D3. Per-user storage quota**, enforced backend-side, surfaced in the UI before an upload is attempted
   rather than failing silently after.
-- [ ] **D4. Migrate existing local photos** for accounts created via B7's import — walk the device's existing
+- [x] **D4. Migrate existing local photos** for accounts created via B7's import — walk the device's existing
   `EventMediaEntity` rows and upload each `localPath` file, same presigned flow as D1.
 
 **Exit condition:** a photo added on one device is visible from another; uninstalling the app no longer loses
 photos.
+
+**Status — D1 and D4 written; not run.** Migrations `0011` (bucket, storage policies, `storage_path`
+column) and `0012` (carry that path through export/import). Room schema v8. D2 (thumbnailing) and D3
+(quota) are untouched.
+
+**The bucket is private and reads go through short-lived signed URLs.** A public bucket would be simpler —
+permanent URLs, free caching — but a public URL is a bearer token that never expires: anywhere it leaks it
+works forever, and there is no revoking it. That would undo Milestone B's whole premise, where possession
+of a URL grants nothing and the session decides. Ownership is carried by the object path
+(`{user_id}/{event_id}/{media_id}.ext`) and every storage policy reads `auth.uid()` out of its first
+segment — the storage equivalent of the `user_id` column on `events`.
+
+**Deviation from D1 as written:** the plan said to *replace* the local-copy behaviour with a presigned
+upload. Two changes. The local copy stays, because Milestone C made saves work offline and an upload on the
+save path would undo that — the file is copied locally, the row is queued, and the bytes follow when there
+is signal. And the upload is a direct authenticated call rather than a presigned URL, because the client
+already holds a session; presigning would mean an Edge Function issuing URLs to a client that can already
+prove who it is.
+
+**Uploads go through the outbox as their own operation**, separate from ADD_MEDIA. The row is small and
+syncs in a moment; the file can be megabytes and may need many retries, and tying them together would let
+a stalled upload block a lineup edit queued behind it.
+
+**D4 is not a one-off migration.** The backfill is expressed as "anything with no storage path", so the
+same code covers photos imported before this milestone, a photo added offline, and an upload that failed
+weeks ago — rather than three mechanisms that each have to be remembered. Twenty per sync run, so a library
+with hundreds of photos drains steadily instead of making one run responsible for all of it.
+
+**Display prefers the local file, always.** The copy on this phone is free, instant and works with no
+signal; a signed URL is minted only when the file is missing — a fresh install, a second device, or a
+restore that carried rows but not bytes. URLs are cached for an hour and re-signed five minutes early.
+
+**Not covered, deliberately:** list thumbnails (`EventSummary.thumbnailPath`) stay local-only. Signing a
+URL per row would make scrolling the artist and city lists a burst of network calls, and thumbnails proper
+are D2. A show whose photos live only in the cloud shows its grid on the detail screen but no thumbnail in
+lists.
 
 ---
 

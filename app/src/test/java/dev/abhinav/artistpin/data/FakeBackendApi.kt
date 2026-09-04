@@ -140,6 +140,25 @@ class FakeBackendApi : BackendApi {
 
     override suspend fun deleteMedia(mediaId: String) = Unit
 
+    /** Uploaded object paths, in order, so a test can assert where bytes were put. */
+    val uploads = mutableListOf<String>()
+    var failUpload: Exception? = null
+    val storagePathWrites = mutableListOf<Pair<String, String>>()
+
+    override suspend fun uploadMedia(path: String, bytes: ByteArray, mimeType: String) {
+        failUpload?.let { throw it }
+        uploads += path
+    }
+
+    override suspend fun setMediaStoragePath(mediaId: String, path: String) {
+        storagePathWrites += mediaId to path
+    }
+
+    override suspend fun signedMediaUrl(path: String, expiresInSeconds: Long): String =
+        "https://signed.example/$path?token=fake"
+
+    override suspend fun deleteStoredMedia(paths: List<String>) = Unit
+
     override suspend fun setArtistProfile(
         artistId: String,
         imageUrl: String?,

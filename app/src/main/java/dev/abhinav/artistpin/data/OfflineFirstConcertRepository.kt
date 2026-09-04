@@ -19,6 +19,7 @@ import dev.abhinav.artistpin.core.model.onSuccess
 import dev.abhinav.artistpin.data.sync.AddMediaPayload
 import dev.abhinav.artistpin.data.sync.DeleteArtistPayload
 import dev.abhinav.artistpin.data.sync.DeleteEventPayload
+import dev.abhinav.artistpin.data.sync.DeleteStoredMediaPayload
 import dev.abhinav.artistpin.data.sync.MediaRowPayload
 import dev.abhinav.artistpin.data.sync.NoSyncScheduler
 import dev.abhinav.artistpin.data.sync.SyncScheduler
@@ -132,8 +133,11 @@ class OfflineFirstConcertRepository(
             )
         }
 
-    override suspend fun deleteEvent(eventId: String): DataResult<Unit> =
-        local.deleteEvent(eventId).onSuccess {
+    override suspend fun deleteEvent(eventId: String): DataResult<Unit> {
+        // Read before the delete: afterwards the rows are gone and nothing remembers which objects
+        // in the bucket belonged to this show.
+        val storedPaths = mediaDao.remotePathsForEvent(eventId)
+        return local.deleteEvent(eventId).onSuccess {
             // Everything queued about this show is now pointless — including, possibly, its own
             // creation. Dropping those first keeps the queue from replaying a show only to delete
             // it a moment later.
@@ -146,7 +150,9 @@ class OfflineFirstConcertRepository(
                     DeleteEventPayload(eventId),
                 ),
             )
+            queueStorageDeletion(storedPaths)
         }
+    }
 
     override suspend fun renameArtist(artistId: String, newName: String): DataResult<Unit> {
         // Read before the rename, because afterwards the old spelling is gone and the server has
@@ -215,8 +221,9 @@ class OfflineFirstConcertRepository(
             )
         }
 
-    override suspend fun removeMedia(mediaId: String, localPath: String): DataResult<Unit> =
-        local.removeMedia(mediaId, localPath).onSuccess {
+    override suspend fun removeMedia(mediaId: String, localPath: String): DataResult<Unit> {
+        val storedPath = mediaDao.remotePathFor(mediaId)
+        return local.removeMedia(mediaId, localPath).onSuccess {
             enqueue(
                 operation = SyncOperation.REMOVE_MEDIA,
                 entityId = mediaId,
@@ -225,7 +232,29 @@ class OfflineFirstConcertRepository(
                     RemoveMediaPayload(mediaId),
                 ),
             )
+            queueStorageDeletion(listOfNotNull(storedPath))
         }
+    }
+
+    /**
+     * Deleting the row is not deleting the photo.
+     *
+     * Removing an event_media row leaves the uploaded bytes in the bucket: invisible to the app,
+     * still counted against storage, and still retrievable by anyone who can sign a URL for that
+     * path. The user was told the photo was deleted, so it has to actually go — queued rather than
+     * done inline, so that remains true when the delete happened with no signal.
+     */
+    private suspend fun queueStorageDeletion(paths: List<String>) {
+        if (paths.isEmpty()) return
+        enqueue(
+            operation = SyncOperation.DELETE_STORED_MEDIA,
+            entityId = paths.first(),
+            payload = json.encodeToString(
+                DeleteStoredMediaPayload.serializer(),
+                DeleteStoredMediaPayload(paths),
+            ),
+        )
+    }
 
     private suspend fun enqueue(
         operation: SyncOperation,

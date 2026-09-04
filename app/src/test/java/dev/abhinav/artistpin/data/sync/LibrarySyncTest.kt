@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import dev.abhinav.artistpin.core.database.ArtistPinDatabase
 import dev.abhinav.artistpin.core.database.SyncOutboxEntity
 import dev.abhinav.artistpin.core.model.DataResult
+import dev.abhinav.artistpin.data.FakeAuthRepository
 import dev.abhinav.artistpin.data.FakeBackendApi
 import dev.abhinav.artistpin.data.RoomBackupRepository
 import kotlinx.coroutines.asExecutor
@@ -57,6 +58,8 @@ class LibrarySyncTest {
                 json = json,
                 ioDispatcher = testDispatcher,
             ),
+            mediaDao = database.mediaDao(),
+            auth = FakeAuthRepository(),
             json = json,
             ioDispatcher = testDispatcher,
         )

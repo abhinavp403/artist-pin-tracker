@@ -95,4 +95,10 @@ data class BackupMedia(
     val mimeType: String,
     val capturedAt: Long? = null,
     val sortIndex: Int = 0,
+    /**
+     * Where the bytes live in object storage. Optional, so files written before Milestone D still
+     * parse — and load-bearing for the sync's pull, which rebuilds Room from this shape: omit it and
+     * every photo looks un-uploaded and gets queued again on every refresh.
+     */
+    val storagePath: String? = null,
 )

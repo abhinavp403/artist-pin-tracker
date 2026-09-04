@@ -109,6 +109,7 @@ fun EventMediaDto.toModel() = EventMedia(
     mimeType = mimeType,
     capturedAt = capturedAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() },
     sortIndex = sortIndex,
+    remotePath = storagePath,
 )
 
 fun EventDetailDto.toModel(): ConcertEvent? {

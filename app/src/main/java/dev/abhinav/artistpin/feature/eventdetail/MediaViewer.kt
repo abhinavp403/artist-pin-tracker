@@ -18,6 +18,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -35,6 +36,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
+import dev.abhinav.artistpin.core.designsystem.rememberMediaModel
 import dev.abhinav.artistpin.core.model.EventMedia
 import kotlinx.coroutines.delay
 import java.io.File
@@ -66,8 +68,9 @@ fun MediaViewerDialog(
                 if (item.isVideo) {
                     VideoPage(item = item, isActive = page == pagerState.currentPage)
                 } else {
+                    val model by rememberMediaModel(item)
                     AsyncImage(
-                        model = File(item.localPath),
+                        model = model,
                         contentDescription = "Photo ${page + 1} of ${media.size}",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
@@ -119,12 +122,26 @@ fun MediaViewerDialog(
 @Composable
 private fun VideoPage(item: EventMedia, isActive: Boolean) {
     val context = LocalContext.current
+    // Resolved the same way photos are. Reading the local file directly meant a video whose bytes
+    // live only in object storage — a second device, or a reinstall — handed ExoPlayer a file:// URI
+    // for a path that does not exist, and simply failed to play while the photos beside it loaded.
+    val source by rememberMediaModel(item)
+
     val player = remember(item.id) {
         ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(File(item.localPath).toURI().toString()))
             repeatMode = Player.REPEAT_MODE_OFF
-            prepare()
         }
+    }
+
+    LaunchedEffect(player, source) {
+        val uri = when (val resolved = source) {
+            is File -> resolved.toURI().toString()
+            is String -> resolved
+            // Still resolving, or the video exists nowhere reachable. Nothing to prepare.
+            else -> return@LaunchedEffect
+        }
+        player.setMediaItem(MediaItem.fromUri(uri))
+        player.prepare()
     }
 
     DisposableEffect(player) {

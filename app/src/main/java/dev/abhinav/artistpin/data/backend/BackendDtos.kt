@@ -104,6 +104,8 @@ data class EventMediaDto(
     @SerialName("mime_type") val mimeType: String,
     @SerialName("captured_at") val capturedAt: String? = null,
     @SerialName("sort_index") val sortIndex: Int = 0,
+    /** Where the bytes live in the bucket. Null until the upload has happened. */
+    @SerialName("storage_path") val storagePath: String? = null,
 )
 
 /** One row of the `event_artists` join, with the artist embedded. */

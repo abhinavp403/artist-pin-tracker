@@ -1,6 +1,9 @@
 package dev.abhinav.artistpin.data.sync
 
 import android.util.Log
+import dev.abhinav.artistpin.core.auth.AuthRepository
+import dev.abhinav.artistpin.core.auth.AuthState
+import dev.abhinav.artistpin.core.database.MediaDao
 import dev.abhinav.artistpin.core.database.SyncOutboxDao
 import dev.abhinav.artistpin.core.database.SyncOutboxEntity
 import dev.abhinav.artistpin.core.model.BackupData
@@ -15,6 +18,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import java.io.File
 import java.io.IOException
 import java.time.Instant
 
@@ -52,6 +56,8 @@ class LibrarySync(
     private val outbox: SyncOutboxDao,
     private val api: BackendApi,
     private val localBackup: RoomBackupRepository,
+    private val mediaDao: MediaDao,
+    private val auth: AuthRepository,
     private val json: Json,
     private val ioDispatcher: CoroutineDispatcher,
 ) {
@@ -61,6 +67,7 @@ class LibrarySync(
 
     suspend fun syncNow(): DataResult<SyncResult> = withContext(ioDispatcher) {
         try {
+            queuePendingUploads()
             val (pushed, dropped) = drain()
             val remaining = outbox.pendingCount()
 
@@ -120,6 +127,12 @@ class LibrarySync(
                     "Abandoning ${entry.operation} for ${entry.entityId} after " +
                         "${entry.attempts + 1} attempts: ${cause?.message}",
                 )
+                // An abandoned upload has to be recorded on the media row as well. Without it the
+                // backfill regenerates this exact entry on the next run, and the escape hatch above
+                // never actually escapes.
+                if (entry.operation == SyncOperation.UPLOAD_MEDIA.name) {
+                    mediaDao.recordUploadFailure(entry.entityId)
+                }
                 outbox.remove(entry.id)
                 dropped++
                 // Deliberately continues rather than breaking: this entry is gone, so the ordering
@@ -199,7 +212,86 @@ class LibrarySync(
                 val p = json.decodeFromString(RemoveMediaPayload.serializer(), entry.payloadJson)
                 api.deleteMedia(p.mediaId)
             }
+
+            SyncOperation.UPLOAD_MEDIA -> {
+                val p = json.decodeFromString(UploadMediaPayload.serializer(), entry.payloadJson)
+                uploadOne(p)
+            }
+
+            SyncOperation.DELETE_STORED_MEDIA -> {
+                val p = json.decodeFromString(
+                    DeleteStoredMediaPayload.serializer(),
+                    entry.payloadJson,
+                )
+                api.deleteStoredMedia(p.paths)
+            }
         }
+    }
+
+    /**
+     * Sends one photo's bytes, then records where they landed — locally and on the server.
+     *
+     * Order matters. The upload happens first, and only a successful upload writes the path, so an
+     * interrupted attempt leaves the row exactly as it was and the queue tries again. Writing the
+     * path first would mark a photo as backed up when it is not, which is the one lie this feature
+     * cannot afford to tell.
+     */
+    private suspend fun uploadOne(payload: UploadMediaPayload) {
+        val file = File(payload.localPath)
+        if (!file.exists()) {
+            // The file is gone — deleted outside the app, or cleared with the app's storage. There
+            // is nothing to upload and never will be, so the row is retired from the queue rather
+            // than merely skipped: leaving it un-uploaded would have the backfill queue it again on
+            // the very next sync, and every sync after that, forever.
+            Log.w(TAG, "Nothing to upload for ${payload.mediaId}: ${payload.localPath} is gone")
+            mediaDao.abandonUpload(payload.mediaId, MAX_UPLOAD_ATTEMPTS)
+            return
+        }
+
+        val userId = (auth.state.value as? AuthState.SignedIn)?.userId
+            ?: throw IllegalStateException("Not signed in; cannot upload media")
+
+        // The first segment is what the storage policies read ownership from, so it is not
+        // cosmetic — see 0011_media_storage.sql.
+        val path = "$userId/${payload.eventId}/${payload.mediaId}${file.extension.dotted()}"
+
+        api.uploadMedia(path, file.readBytes(), payload.mimeType)
+        api.setMediaStoragePath(payload.mediaId, path)
+        mediaDao.setRemotePath(payload.mediaId, path)
+    }
+
+    private fun String.dotted(): String = if (isBlank()) "" else ".$this"
+
+    /**
+     * Queues uploads for photos whose bytes have never left the phone (plan item D4).
+     *
+     * Deliberately not a one-off migration. Expressing the backfill as "anything without a storage
+     * path" means the same code covers the photos imported before Milestone D, a photo added while
+     * offline, and an upload that failed three weeks ago — rather than three mechanisms that each
+     * have to be remembered.
+     */
+    private suspend fun queuePendingUploads() {
+        val pending = mediaDao.awaitingUpload(UPLOAD_BATCH, MAX_UPLOAD_ATTEMPTS)
+        for (media in pending) {
+            if (outbox.countFor(media.id, SyncOperation.UPLOAD_MEDIA.name) > 0) continue
+            outbox.enqueue(
+                SyncOutboxEntity(
+                    operation = SyncOperation.UPLOAD_MEDIA.name,
+                    entityId = media.id,
+                    payloadJson = json.encodeToString(
+                        UploadMediaPayload.serializer(),
+                        UploadMediaPayload(
+                            mediaId = media.id,
+                            eventId = media.eventId,
+                            localPath = media.localPath,
+                            mimeType = media.mimeType,
+                        ),
+                    ),
+                    queuedAtEpochMillis = System.currentTimeMillis(),
+                ),
+            )
+        }
+        if (pending.isNotEmpty()) Log.d(TAG, "Queued ${pending.size} photo(s) for upload")
     }
 
     /**
@@ -228,5 +320,19 @@ class LibrarySync(
          * more failed requests.
          */
         const val MAX_ATTEMPTS = 5
+
+        /**
+         * Photos queued per sync run. A library migrated from years of shows can hold hundreds, and
+         * queueing them all at once would make one run responsible for the whole upload — slow,
+         * failure-prone, and invisible while it happens. A batch per run drains steadily instead.
+         */
+        const val UPLOAD_BATCH = 20
+
+        /**
+         * Failed uploads before a photo stops being queued. Separate from [MAX_ATTEMPTS], which
+         * counts one queue entry's failures — this counts how many times the photo has been given
+         * up on across runs, which is the number the backfill has to respect.
+         */
+        const val MAX_UPLOAD_ATTEMPTS = 3
     }
 }

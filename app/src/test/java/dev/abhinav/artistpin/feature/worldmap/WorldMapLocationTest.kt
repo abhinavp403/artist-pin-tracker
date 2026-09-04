@@ -12,6 +12,7 @@ import dev.abhinav.artistpin.data.ConcertRepository
 import dev.abhinav.artistpin.data.RoomConcertRepository
 import dev.abhinav.artistpin.data.EventDraft
 import dev.abhinav.artistpin.data.FakeArtistImageSource
+import dev.abhinav.artistpin.data.FakeAuthRepository
 import dev.abhinav.artistpin.data.FakeBackendApi
 import dev.abhinav.artistpin.data.LibraryMigrator
 import dev.abhinav.artistpin.data.sync.LibrarySync
@@ -97,6 +98,8 @@ class WorldMapLocationTest {
                 outbox = database.syncOutboxDao(),
                 api = FakeBackendApi(),
                 localBackup = backups,
+                mediaDao = database.mediaDao(),
+                auth = FakeAuthRepository(),
                 json = Json,
                 ioDispatcher = testDispatcher,
             ),

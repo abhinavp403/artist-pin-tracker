@@ -113,6 +113,26 @@ interface BackendApi {
 
     suspend fun deleteMedia(mediaId: String)
 
+    // ---- Object storage (Milestone D) -------------------------------------------------
+
+    /**
+     * Uploads one file. [path] is `{userId}/{eventId}/{mediaId}.{ext}` — the storage policies read
+     * ownership out of that first segment, so the path is not decorative.
+     */
+    suspend fun uploadMedia(path: String, bytes: ByteArray, mimeType: String)
+
+    /** Records where a media row's bytes ended up, so other devices can find them. */
+    suspend fun setMediaStoragePath(mediaId: String, path: String)
+
+    /**
+     * A short-lived URL for displaying a stored photo. Minted on demand rather than stored: the
+     * bucket is private precisely so that a URL is not a permanent key to the file.
+     */
+    suspend fun signedMediaUrl(path: String, expiresInSeconds: Long): String
+
+    /** Removes the stored bytes. Called when a photo or its show is deleted. */
+    suspend fun deleteStoredMedia(paths: List<String>)
+
     /**
      * Fills in blanks on a shared catalog row; cannot overwrite. See the coalesce note on
      * `catalog_set_artist_profile` in 0003_catalog_functions.sql.

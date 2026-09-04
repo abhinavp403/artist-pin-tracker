@@ -16,6 +16,24 @@ enum class SyncOperation {
     DELETE_ARTIST,
     ADD_MEDIA,
     REMOVE_MEDIA,
+
+    /**
+     * Send one photo's bytes to object storage.
+     *
+     * Separate from ADD_MEDIA, which only sends the row. The row is small and syncs in a moment;
+     * the file can be several megabytes and may need many retries on a bad connection, and tying
+     * the two together would mean a failed upload blocking a lineup edit behind it.
+     */
+    UPLOAD_MEDIA,
+
+    /**
+     * Remove uploaded bytes from the bucket.
+     *
+     * Queued rather than done inline so a delete survives being offline — otherwise deleting a
+     * photo on the underground would leave its bytes in storage forever, and the user would be
+     * told it was gone.
+     */
+    DELETE_STORED_MEDIA,
 }
 
 /**
@@ -75,3 +93,19 @@ data class AddMediaPayload(val eventId: String, val rows: List<MediaRowPayload>)
 
 @Serializable
 data class RemoveMediaPayload(val mediaId: String)
+
+/**
+ * Carries the path on disk rather than the bytes: the queue lives in SQLite, and a few megabytes of
+ * base64 per photo would bloat the database and be read back on every drain. The file is read at
+ * send time, and a file that has since vanished simply drops the entry.
+ */
+@Serializable
+data class DeleteStoredMediaPayload(val paths: List<String>)
+
+@Serializable
+data class UploadMediaPayload(
+    val mediaId: String,
+    val eventId: String,
+    val localPath: String,
+    val mimeType: String,
+)

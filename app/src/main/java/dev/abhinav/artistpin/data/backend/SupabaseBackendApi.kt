@@ -3,6 +3,8 @@ package dev.abhinav.artistpin.data.backend
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
+import io.github.jan.supabase.storage.storage
+import kotlin.time.Duration.Companion.seconds
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.query.filter.FilterOperator
@@ -184,6 +186,30 @@ class SupabaseBackendApi(
         Unit
     }
 
+    override suspend fun uploadMedia(path: String, bytes: ByteArray, mimeType: String) = io {
+        // upsert so a retried upload overwrites rather than colliding. The sync queue can replay an
+        // entry whose upload actually succeeded but whose acknowledgement never arrived, and the
+        // bytes are identical either way.
+        client.storage.from(MEDIA_BUCKET).upload(path, bytes) { this.upsert = true }
+        Unit
+    }
+
+    override suspend fun setMediaStoragePath(mediaId: String, path: String) = io {
+        client.postgrest.from(EVENT_MEDIA)
+            .update({ set("storage_path", path) }) { filter { eq("id", mediaId) } }
+        Unit
+    }
+
+    override suspend fun signedMediaUrl(path: String, expiresInSeconds: Long): String = io {
+        client.storage.from(MEDIA_BUCKET)
+            .createSignedUrl(path, expiresInSeconds.seconds)
+    }
+
+    override suspend fun deleteStoredMedia(paths: List<String>) = io {
+        if (paths.isNotEmpty()) client.storage.from(MEDIA_BUCKET).delete(paths)
+        Unit
+    }
+
     override suspend fun setArtistProfile(
         artistId: String,
         imageUrl: String?,
@@ -214,6 +240,7 @@ class SupabaseBackendApi(
         const val ARTISTS = "artists"
         const val VENUES = "venues"
         const val EVENT_MEDIA = "event_media"
+        const val MEDIA_BUCKET = "event-media"
 
         const val SAVE_EVENT = "save_event"
         const val DELETE_EVENT = "delete_event"

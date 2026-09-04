@@ -58,6 +58,7 @@ class ModuleVerificationTest {
                 ArtistImageSource::class,
                 BackendApi::class,
                 ArtistPinDatabase::class,
+                AuthRepository::class,
                 RoomBackupRepository::class,
                 kotlinx.serialization.json.Json::class,
             ),

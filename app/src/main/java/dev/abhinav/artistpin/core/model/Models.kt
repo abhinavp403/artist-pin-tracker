@@ -46,8 +46,13 @@ data class EventMedia(
     val mimeType: String,
     val capturedAt: Long?,
     val sortIndex: Int,
+    /** Set once the file has reached object storage; null while it is still only on this device. */
+    val remotePath: String? = null,
 ) {
     val isVideo: Boolean get() = mimeType.startsWith("video/")
+
+    /** False while the bytes exist nowhere but this phone — the state Milestone D exists to end. */
+    val isBackedUp: Boolean get() = remotePath != null
 }
 
 /** One night at one venue — the unit the whole app is organized around. */

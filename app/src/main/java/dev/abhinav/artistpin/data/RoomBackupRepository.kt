@@ -62,7 +62,7 @@ class RoomBackupRepository(
             media = mediaDao.allMedia().map {
                 BackupMedia(
                     it.id, it.eventId, it.localPath, it.originalUri,
-                    it.mimeType, it.capturedAt, it.sortIndex,
+                    it.mimeType, it.capturedAt, it.sortIndex, it.remotePath,
                 )
             },
         )
@@ -94,6 +94,13 @@ class RoomBackupRepository(
     }
 
     private suspend fun restoreWithin(backup: BackupData): RestoreSummary {
+        // Device-local bookkeeping that the server neither knows nor should know: how many times
+        // uploading this file has been given up on. The backup format has no field for it, so
+        // rebuilding rows from the payload would silently reset it to zero — and a photo that can
+        // never upload would be queued again after every refresh, which is exactly the loop the
+        // counter exists to stop.
+        val uploadAttemptsById = mediaDao.allMedia().associate { it.id to it.uploadAttempts }
+
         concertDao.deleteAllCities()
         artistDao.deleteAllArtists()
 
@@ -123,15 +130,18 @@ class RoomBackupRepository(
                 )
             },
         )
-        // Photo files are not in the backup, so a restore onto a fresh install would otherwise
-        // leave rows pointing at paths that no longer exist.
+        // A row is worth keeping if its bytes are reachable from *somewhere*: the file on this
+        // device, or object storage. Before Milestone D only the first existed, so a restore onto a
+        // fresh install dropped every photo rather than leaving broken thumbnails; now a row with a
+        // storage path is recoverable on any device and must survive.
         mediaDao.upsertMedia(
             backup.media
-                .filter { File(it.localPath).exists() }
+                .filter { File(it.localPath).exists() || it.storagePath != null }
                 .map {
                     EventMediaEntity(
                         it.id, it.eventId, it.localPath, it.originalUri,
-                        it.mimeType, it.capturedAt, it.sortIndex,
+                        it.mimeType, it.capturedAt, it.sortIndex, it.storagePath,
+                        uploadAttempts = uploadAttemptsById[it.id] ?: 0,
                     )
                 },
         )

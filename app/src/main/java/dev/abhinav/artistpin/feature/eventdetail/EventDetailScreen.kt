@@ -77,6 +77,7 @@ import coil3.compose.AsyncImage
 import dev.abhinav.artistpin.R
 import dev.abhinav.artistpin.core.designsystem.ArtistAvatar
 import dev.abhinav.artistpin.core.designsystem.Pin
+import dev.abhinav.artistpin.core.designsystem.rememberMediaModel
 import dev.abhinav.artistpin.core.model.ConcertEvent
 import dev.abhinav.artistpin.core.model.EventMedia
 import org.koin.androidx.compose.koinViewModel
@@ -763,8 +764,9 @@ private fun PhotoGrid(media: List<EventMedia>, onOpen: (Int) -> Unit) {
                             .clip(RoundedCornerShape(Pin.RadiusTile))
                             .clickable { onOpen(index) },
                     ) {
+                        val model by rememberMediaModel(item)
                         AsyncImage(
-                            model = File(item.localPath),
+                            model = model,
                             contentDescription = if (item.isVideo) {
                                 "Video from this show"
                             } else {
