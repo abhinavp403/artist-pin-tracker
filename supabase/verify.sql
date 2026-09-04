@@ -97,4 +97,43 @@ select '7. anon has no access', 'all tables', 'PASS'
      where grantee = 'anon' and table_schema = 'public'
  )
 
+union all
+
+-- 8. The media bucket exists and is private.
+--    A public bucket hands out permanent URLs that work for anyone who ever sees them, with no
+--    expiry and no revoking — the exact property the RLS work above exists to deny.
+select '8. Media bucket is private',
+       id,
+       case when public then 'FAIL — bucket is PUBLIC' else 'PASS' end
+  from storage.buckets
+ where id = 'event-media'
+
+union all
+
+select '8. Media bucket is private', 'event-media', 'FAIL — bucket does not exist'
+ where not exists (select 1 from storage.buckets where id = 'event-media')
+
+union all
+
+-- 9. Every storage policy scopes objects to their owner.
+--    Ownership lives in the object path, so a policy that forgot to compare the first path segment
+--    to auth.uid() would let any signed-in user read or overwrite anyone's photos.
+select '9. Storage policies scoped',
+       policyname,
+       case when coalesce(qual, '') || coalesce(with_check, '') like '%uid%'
+            then 'PASS' else 'FAIL — not scoped to the caller' end
+  from pg_policies
+ where schemaname = 'storage' and tablename = 'objects'
+   and coalesce(qual, '') || coalesce(with_check, '') like '%event-media%'
+
+union all
+
+-- 10. The column that records where a photo's bytes went.
+select '10. storage_path column', 'event_media',
+       case when exists (
+                select 1 from information_schema.columns
+                 where table_schema = 'public' and table_name = 'event_media'
+                   and column_name = 'storage_path'
+            ) then 'PASS' else 'FAIL — column missing' end
+
 order by 1, 2;
