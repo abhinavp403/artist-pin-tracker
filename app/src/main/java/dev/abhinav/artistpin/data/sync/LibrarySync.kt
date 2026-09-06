@@ -60,6 +60,11 @@ class LibrarySync(
     private val auth: AuthRepository,
     private val json: Json,
     private val ioDispatcher: CoroutineDispatcher,
+    /**
+     * Asked to try again whenever a run ends incomplete. Defaults to a no-op so tests and the
+     * device-only build need not care.
+     */
+    private val scheduler: SyncScheduler = NoSyncScheduler,
 ) {
 
     /** How many changes are waiting, for the indicator in the dock (plan item C5). */
@@ -80,13 +85,23 @@ class LibrarySync(
                 false
             }
 
+            // Anything still queued deserves another attempt on a connection we do not have yet.
+            if (remaining > 0) scheduler.requestSync()
+
             DataResult.Success(SyncResult(pushed, remaining, pulled, dropped))
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
+            // The case this exists for: the very first sync after signing in on a new phone. That
+            // run is a pure pull with nothing queued, so no write ever asks the scheduler for it —
+            // and if it fails on a flaky connection the app simply sits empty until the user
+            // happens to reopen it. Asking here means WorkManager waits for real connectivity and
+            // finishes the job on its own.
+            scheduler.requestSync()
             DataResult.Failure(DataError.Network(e.message))
         } catch (e: Exception) {
             Log.w(TAG, "Sync failed", e)
+            scheduler.requestSync()
             DataResult.Failure(DataError.Unknown(e.message))
         }
     }
