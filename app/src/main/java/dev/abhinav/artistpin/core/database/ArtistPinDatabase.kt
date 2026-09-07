@@ -28,7 +28,7 @@ class Converters {
         EventMediaEntity::class,
         SyncOutboxEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -40,6 +40,20 @@ abstract class ArtistPinDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "artistpin.db"
+
+        /**
+         * Clears the upload-failure count on every photo.
+         *
+         * Uploads could not have worked at all: the Storage plugin was never installed on the
+         * Supabase client, so every attempt threw before reaching the network. Photos that burned
+         * through their retry budget did so for a reason that had nothing to do with them, and
+         * without this reset they would never be offered to the queue again.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("UPDATE event_media SET uploadAttempts = 0")
+            }
+        }
 
         /**
          * Records how often a photo's upload has been abandoned, so one that can never be sent

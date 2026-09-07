@@ -37,16 +37,31 @@ interface MediaDao {
      * hundreds of items on a library this old, and queueing them all at once would make one sync
      * run responsible for the entire upload.
      */
+    /**
+     * Photos awaiting upload. Videos are excluded by the `mimeType` clause, not by an oversight:
+     * they are routinely larger than the bucket's 50 MB object limit — which is also the free
+     * plan's ceiling and so cannot be raised — and uploading the ones that happen to fit would
+     * spend most of the storage quota on a handful of clips. They stay on the device.
+     */
     @Query(
         """
         SELECT * FROM event_media
-         WHERE remotePath IS NULL AND uploadAttempts < :maxAttempts
+         WHERE remotePath IS NULL
+           AND uploadAttempts < :maxAttempts
+           AND mimeType NOT LIKE 'video/%'
          ORDER BY id LIMIT :limit
         """,
     )
     suspend fun awaitingUpload(limit: Int, maxAttempts: Int): List<EventMediaEntity>
 
-    @Query("SELECT COUNT(*) FROM event_media WHERE remotePath IS NULL AND uploadAttempts < :maxAttempts")
+    @Query(
+        """
+        SELECT COUNT(*) FROM event_media
+         WHERE remotePath IS NULL
+           AND uploadAttempts < :maxAttempts
+           AND mimeType NOT LIKE 'video/%'
+        """,
+    )
     fun observeAwaitingUploadCount(maxAttempts: Int): Flow<Int>
 
     /** Marks one more failed attempt, so a doomed upload eventually stops being re-queued. */

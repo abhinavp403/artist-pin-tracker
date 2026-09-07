@@ -100,7 +100,7 @@ class LibrarySync(
             scheduler.requestSync()
             DataResult.Failure(DataError.Network(e.message))
         } catch (e: Exception) {
-            Log.w(TAG, "Sync failed", e)
+            Log.w(TAG, "Sync failed: ${e.redacted()}")
             scheduler.requestSync()
             DataResult.Failure(DataError.Unknown(e.message))
         }
@@ -127,8 +127,12 @@ class LibrarySync(
 
             val cause = sent.exceptionOrNull()
             if (cause is CancellationException) throw cause
-            Log.w(TAG, "Could not push ${entry.operation} for ${entry.entityId}", cause)
-            outbox.recordFailure(entry.id, cause?.message)
+            // Redacted, not raw. supabase-kt puts the full request headers into its exception
+            // message, which includes the session's bearer token — logging the exception verbatim
+            // writes a live credential to logcat, and recordFailure would store it in SQLite.
+            val reason = cause.redacted()
+            Log.w(TAG, "Could not push ${entry.operation} for ${entry.entityId}: $reason")
+            outbox.recordFailure(entry.id, reason)
 
             // The escape hatch. Without it, one entry that can never succeed — a delete the server
             // rejects, a payload a newer build wrote — blocks every later change forever, while the
@@ -140,7 +144,7 @@ class LibrarySync(
                 Log.w(
                     TAG,
                     "Abandoning ${entry.operation} for ${entry.entityId} after " +
-                        "${entry.attempts + 1} attempts: ${cause?.message}",
+                        "${entry.attempts + 1} attempts: $reason",
                 )
                 // An abandoned upload has to be recorded on the media row as well. Without it the
                 // backfill regenerates this exact entry on the next run, and the escape hatch above
@@ -263,6 +267,28 @@ class LibrarySync(
             return
         }
 
+        if (payload.mimeType.startsWith("video/")) {
+            // Videos are never uploaded. The backfill query already excludes them, so this only
+            // catches entries queued before that rule existed — retiring them rather than letting
+            // them fail against the size limit fifteen times over.
+            Log.d(TAG, "Videos stay on the device: ${payload.mediaId}")
+            mediaDao.abandonUpload(payload.mediaId, MAX_UPLOAD_ATTEMPTS)
+            return
+        }
+
+        if (file.length() > MAX_UPLOAD_BYTES) {
+            // The bucket caps objects at 50 MB, which is also the ceiling on Supabase's free plan,
+            // so this cannot be raised — a longer video simply has nowhere to go. Retiring it here
+            // rather than letting the server refuse it means one clear decision instead of fifteen
+            // failed round trips with the file's bytes sent each time.
+            Log.w(
+                TAG,
+                "Too large to upload (${file.length() / 1_048_576} MB): ${payload.mediaId}",
+            )
+            mediaDao.abandonUpload(payload.mediaId, MAX_UPLOAD_ATTEMPTS)
+            return
+        }
+
         val userId = (auth.state.value as? AuthState.SignedIn)?.userId
             ?: throw IllegalStateException("Not signed in; cannot upload media")
 
@@ -276,6 +302,21 @@ class LibrarySync(
     }
 
     private fun String.dotted(): String = if (isBlank()) "" else ".$this"
+
+    /**
+     * A loggable one-liner with credentials stripped.
+     *
+     * supabase-kt's REST exceptions carry the whole request — including `Authorization: Bearer …` —
+     * in their message. That message reaches logcat and the outbox's lastError column, so it has to
+     * be cleaned before either.
+     */
+    private fun Throwable?.redacted(): String {
+        val raw = this?.message ?: return this?.javaClass?.simpleName ?: "unknown"
+        return raw.substringBefore("Headers:")
+            .replace(Regex("(?i)(bearer|apikey=?\\[?)\\s*[A-Za-z0-9._\\-]+"), "$1 <redacted>")
+            .trim()
+            .take(300)
+    }
 
     /**
      * Queues uploads for photos whose bytes have never left the phone (plan item D4).
@@ -349,5 +390,8 @@ class LibrarySync(
          * up on across runs, which is the number the backfill has to respect.
          */
         const val MAX_UPLOAD_ATTEMPTS = 3
+
+        /** Matches the bucket's file_size_limit in 0011, which is also the free plan's ceiling. */
+        const val MAX_UPLOAD_BYTES = 50L * 1024 * 1024
     }
 }

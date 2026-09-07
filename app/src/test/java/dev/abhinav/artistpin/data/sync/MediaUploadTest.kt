@@ -102,6 +102,7 @@ class MediaUploadTest {
         id: String = "media-1",
         eventId: String = "event-1",
         remotePath: String? = null,
+        mimeType: String = "image/jpeg",
     ): File {
         givenEvent(eventId)
         val file = File(context.filesDir, "$id.jpg").apply { writeText("pretend jpeg bytes") }
@@ -112,7 +113,7 @@ class MediaUploadTest {
                     eventId = eventId,
                     localPath = file.absolutePath,
                     originalUri = "content://media/$id",
-                    mimeType = "image/jpeg",
+                    mimeType = mimeType,
                     sortIndex = 0,
                     remotePath = remotePath,
                 ),
@@ -126,12 +127,20 @@ class MediaUploadTest {
      * every successful drain rebuilds Room from exactly this, so a payload that omitted
      * storagePath would silently un-mark every uploaded photo — the failure 0012 exists to prevent.
      */
-    private fun serverState(storagePath: String?, localPath: String = MISSING_PATH) =
-        serverStateJson(storagePath, localPath)
+    private fun serverState(
+        storagePath: String?,
+        localPath: String = MISSING_PATH,
+        mimeType: String = "image/jpeg",
+    ) = serverStateJson(storagePath, localPath, mimeType)
 
-    private fun serverStateWithUploadedPhoto(storagePath: String) = serverStateJson(storagePath, MISSING_PATH)
+    private fun serverStateWithUploadedPhoto(storagePath: String) =
+        serverStateJson(storagePath, MISSING_PATH, "image/jpeg")
 
-    private fun serverStateJson(storagePath: String?, localPath: String) = json.parseToJsonElement(
+    private fun serverStateJson(
+        storagePath: String?,
+        localPath: String,
+        mimeType: String,
+    ) = json.parseToJsonElement(
         """
         {
           "version": 1,
@@ -143,7 +152,7 @@ class MediaUploadTest {
           "media": [{"id":"media-1","eventId":"event-1","localPath":"$localPath",
                      "storagePath":${storagePath?.let { "\"$it\"" } ?: "null"},
                      "originalUri":"content://media/media-1",
-                     "mimeType":"image/jpeg","sortIndex":0}]
+                     "mimeType":"$mimeType","sortIndex":0}]
         }
         """.trimIndent(),
     ).jsonObject
@@ -176,6 +185,48 @@ class MediaUploadTest {
         // file is deliberately absent from the payload — the row still has to be kept, because the
         // bytes are now reachable from the bucket.
         assertEquals(expectedPath, database.mediaDao().media("media-1")?.remotePath)
+    }
+
+    @Test
+    fun `videos are never uploaded`() = runTest(testDispatcher) {
+        val file = givenPhoto(mimeType = "video/mp4")
+        // The payload has to say video too: the pull rebuilds Room from it, and an image here
+        // would quietly turn the row back into a photo between the two syncs.
+        api.exportPayload = serverState(
+            storagePath = null,
+            localPath = file.absolutePath,
+            mimeType = "video/mp4",
+        )
+
+        sync.syncNow()
+        sync.syncNow()
+
+        // Clips routinely exceed the bucket's 50 MB object limit, and the ones that fit would eat
+        // most of the storage quota. They stay on the device, and are not queued at all — so the
+        // outbox never grows and nothing is retried.
+        assertTrue(api.uploads.isEmpty())
+        assertEquals(0, database.syncOutboxDao().pendingCount())
+    }
+
+    @Test
+    fun `a file too large for the bucket is retired rather than retried`() = runTest(testDispatcher) {
+        val file = givenPhoto()
+        // One byte over the bucket's limit, which is also the free plan's ceiling and therefore
+        // cannot be raised — this video has nowhere to go.
+        file.writeBytes(ByteArray((LibrarySync.MAX_UPLOAD_BYTES + 1).toInt()))
+        api.exportPayload = serverState(storagePath = null, localPath = file.absolutePath)
+
+        sync.syncNow()
+        sync.syncNow()
+
+        // Never even attempted: the server would refuse it, and letting it find that out costs a
+        // full upload of the bytes on every one of fifteen retries.
+        assertTrue(api.uploads.isEmpty())
+        assertEquals(0, database.syncOutboxDao().pendingCount())
+        assertEquals(
+            LibrarySync.MAX_UPLOAD_ATTEMPTS,
+            database.mediaDao().media("media-1")?.uploadAttempts,
+        )
     }
 
     @Test

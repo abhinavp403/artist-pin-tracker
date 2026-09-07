@@ -20,6 +20,8 @@ import dev.abhinav.artistpin.feature.auth.SignInViewModel
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.serializer.KotlinXSerializer
+import io.github.jan.supabase.storage.Storage
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -88,7 +90,8 @@ val databaseModule = module {
             ArtistPinDatabase.MIGRATION_5_6,
             ArtistPinDatabase.MIGRATION_6_7,
             ArtistPinDatabase.MIGRATION_7_8,
-            ArtistPinDatabase.MIGRATION_8_9).build()
+            ArtistPinDatabase.MIGRATION_8_9,
+            ArtistPinDatabase.MIGRATION_9_10).build()
     }
     single { get<ArtistPinDatabase>().concertDao() }
     single { get<ArtistPinDatabase>().artistDao() }
@@ -218,6 +221,20 @@ val authModule = module {
         ) {
             install(Auth)
             install(Postgrest)
+            // Required by every storage call. supabase-kt resolves plugins at runtime, so omitting
+            // this compiles cleanly and fails only when the first upload runs — which is how it
+            // reached a device: the fake BackendApi never touches the real client, so no unit test
+            // could have seen it.
+            install(Storage)
+            // encodeDefaults, and it is load-bearing. kotlinx.serialization omits any value equal
+            // to its default, but supabase-kt still derives the PostgREST `columns=` list from the
+            // serializer's descriptor — so an omitted field is one the server is told to expect and
+            // then given nothing for, which lands as NULL. `sortIndex = 0` hit exactly that against
+            // a NOT NULL column. Every RPC parameter left at its default was quietly going missing
+            // for the same reason.
+            defaultSerializer = KotlinXSerializer(
+                Json { encodeDefaults = true; ignoreUnknownKeys = true },
+            )
             // Reuses the app's existing OkHttp client, so Supabase shares the connection pool and
             // timeouts rather than standing up a second HTTP stack alongside Retrofit's.
             httpEngine = OkHttp.create { preconfigured = get<OkHttpClient>() }
