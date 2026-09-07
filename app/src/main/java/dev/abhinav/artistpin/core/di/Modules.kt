@@ -29,7 +29,6 @@ import dev.abhinav.artistpin.data.LibraryBackup
 import dev.abhinav.artistpin.data.RoomBackupRepository
 import dev.abhinav.artistpin.data.CachingArtistSearch
 import dev.abhinav.artistpin.data.ChainedArtistImageSource
-import dev.abhinav.artistpin.data.BackendConcertRepository
 import dev.abhinav.artistpin.data.ConcertRepository
 import dev.abhinav.artistpin.data.OfflineFirstConcertRepository
 import dev.abhinav.artistpin.data.RoomConcertRepository

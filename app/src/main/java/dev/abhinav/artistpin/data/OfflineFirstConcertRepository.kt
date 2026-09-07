@@ -35,8 +35,8 @@ import kotlinx.serialization.json.Json
  * Room in front, the backend behind (execution plan C1–C2).
  *
  * Every read comes from Room, which means the Flows are real again — SQLite tells us when a table
- * changed, so the refresh-trigger machinery `BackendConcertRepository` had to invent is gone, and
- * the map no longer goes blank when the phone has no signal.
+ * changed, so the refresh-trigger machinery the direct-to-Postgres implementation had to invent
+ * (since removed) is gone, and the map no longer goes blank when the phone has no signal.
  *
  * Every write lands in Room and queues a row in the outbox, then returns. The network is not on the
  * save's critical path at all: adding a show in a basement venue behaves exactly as it did when the

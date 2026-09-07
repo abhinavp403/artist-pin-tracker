@@ -43,8 +43,8 @@ data class EventDraft(
  * migration is a swap rather than a rewrite.
  *
  * Two implementations: [RoomConcertRepository] (device-local, the original) and
- * [BackendConcertRepository] (Supabase). Which one is bound is a build-time choice; see
- * `dataModule` in `Modules.kt`.
+ * [OfflineFirstConcertRepository] (Room for reads, an outbox for writes). Which one is bound is a
+ * build-time choice; see `dataModule` in `Modules.kt`.
  */
 interface ConcertRepository {
 
