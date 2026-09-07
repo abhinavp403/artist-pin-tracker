@@ -227,6 +227,7 @@ data class EventSummaryRow(
     val supportNames: String?,
     val mediaCount: Int,
     val thumbnailPath: String?,
+    val thumbnailRemotePath: String? = null,
 )
 
 data class ArtistSummaryRow(

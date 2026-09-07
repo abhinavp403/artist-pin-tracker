@@ -107,6 +107,8 @@ data class EventSummary(
     val artistNames: List<String>,
     val mediaCount: Int,
     val thumbnailPath: String?,
+    /** Where that thumbnail lives in object storage, when the local file is not on this device. */
+    val thumbnailRemotePath: String? = null,
     val rating: Int?,
 )
 

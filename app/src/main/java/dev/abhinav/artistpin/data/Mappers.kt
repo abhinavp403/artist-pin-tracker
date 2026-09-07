@@ -95,6 +95,7 @@ fun EventSummaryRow.toModel(): EventSummary {
         artistNames = names,
         mediaCount = mediaCount,
         thumbnailPath = thumbnailPath,
+        thumbnailRemotePath = thumbnailRemotePath,
         rating = rating,
     )
 }

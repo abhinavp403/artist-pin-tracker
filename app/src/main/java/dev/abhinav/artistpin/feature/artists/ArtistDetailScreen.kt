@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import coil3.compose.AsyncImage
 import dev.abhinav.artistpin.core.designsystem.Pin
+import dev.abhinav.artistpin.core.designsystem.rememberThumbnailModel
 import dev.abhinav.artistpin.core.designsystem.titleCaseWords
 import dev.abhinav.artistpin.core.model.ArtistDeletionImpact
 import dev.abhinav.artistpin.core.model.EventSummary
@@ -562,9 +563,10 @@ private fun PhotoStrip(event: EventSummary) {
         modifier = Modifier.padding(top = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        event.thumbnailPath?.let { path ->
+        if (event.thumbnailPath != null || event.thumbnailRemotePath != null) {
+            val model by rememberThumbnailModel(event.thumbnailPath, event.thumbnailRemotePath)
             AsyncImage(
-                model = File(path),
+                model = model,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

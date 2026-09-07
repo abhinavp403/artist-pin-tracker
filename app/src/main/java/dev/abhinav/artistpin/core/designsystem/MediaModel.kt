@@ -27,3 +27,18 @@ fun rememberMediaModel(item: EventMedia): State<Any?> {
         value = resolver.resolve(item)
     }
 }
+
+/**
+ * The same resolution for a list thumbnail, which has paths rather than a media row.
+ *
+ * List rows carry only the first photo's two paths, not the whole [EventMedia], so this takes them
+ * directly. Local first, exactly as elsewhere; the signed URL is the fallback for a device that
+ * never held the file.
+ */
+@Composable
+fun rememberThumbnailModel(localPath: String?, remotePath: String?): State<Any?> {
+    val resolver: MediaUrlResolver = koinInject()
+    return produceState<Any?>(initialValue = null, localPath, remotePath) {
+        value = resolver.resolveThumbnail(localPath, remotePath)
+    }
+}

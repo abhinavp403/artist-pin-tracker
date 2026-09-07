@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,9 +76,10 @@ fun EventRow(
 @Composable
 private fun EventThumbnail(event: EventSummary) {
     val shape = RoundedCornerShape(8.dp)
-    if (event.thumbnailPath != null) {
+    if (event.thumbnailPath != null || event.thumbnailRemotePath != null) {
+        val model by rememberThumbnailModel(event.thumbnailPath, event.thumbnailRemotePath)
         AsyncImage(
-            model = File(event.thumbnailPath),
+            model = model,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(48.dp).clip(shape),

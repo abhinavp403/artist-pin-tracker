@@ -45,6 +45,14 @@ class MediaUrlResolver(
         signedUrl(path)
     }
 
+    /** [resolve] for a list thumbnail, which has paths rather than a whole media row. */
+    suspend fun resolveThumbnail(localPath: String?, remotePath: String?): Any? =
+        withContext(ioDispatcher) {
+            val local = localPath?.takeIf { it.isNotBlank() }?.let(::File)
+            if (local != null && local.exists()) return@withContext local
+            remotePath?.let { signedUrl(it) }
+        }
+
     suspend fun signedUrl(path: String): String? = withContext(ioDispatcher) {
         cached(path)?.let { return@withContext it }
 

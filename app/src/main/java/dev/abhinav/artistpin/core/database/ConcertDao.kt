@@ -25,7 +25,12 @@ private const val EVENT_SUMMARY_SELECT = """
              WHERE ea.eventId = e.id AND ea.billing = 'SUPPORT') AS supportNames,
            (SELECT COUNT(*) FROM event_media m WHERE m.eventId = e.id) AS mediaCount,
            (SELECT m.localPath FROM event_media m WHERE m.eventId = e.id
-             ORDER BY m.sortIndex LIMIT 1) AS thumbnailPath
+             ORDER BY m.sortIndex LIMIT 1) AS thumbnailPath,
+           -- The same row's object-storage path. Needed because a device that never held the file
+           -- has a localPath pointing at another phone's storage, which is why list thumbnails
+           -- were blank after signing in on a new device while the show screen showed them fine.
+           (SELECT m.remotePath FROM event_media m WHERE m.eventId = e.id
+             ORDER BY m.sortIndex LIMIT 1) AS thumbnailRemotePath
       FROM events e
       JOIN venues v ON v.id = e.venueId
       JOIN cities c ON c.id = v.cityId
