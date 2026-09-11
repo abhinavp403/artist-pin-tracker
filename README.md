@@ -1,6 +1,6 @@
 # ArtistPin
 
-A personal Android app for tracking concerts on a map: cities and venues you've been to, the
+An Android app for tracking concerts on a map: cities and venues you've been to, the
 artists you saw there and when, and the photos from each night — all pinned to the place it
 happened.
 
@@ -17,17 +17,24 @@ happened.
 - **An account.** Sign in with Google and your shows live in Postgres rather than on one phone.
   Artists, venues and cities are a catalog everyone shares; your shows are yours alone, enforced
   by row-level security rather than by the app asking nicely.
+- **It works with no signal.** Reads come from a local database, so the map and your shows are
+  there underground. A save lands locally and returns immediately; the change queues and is sent
+  when connectivity comes back, with the dock showing how many are waiting.
 - **Backup and restore** to a JSON file — one format that round-trips through either store, so a
   file written before the migration restores into the account and vice versa.
-- **Photos stay on the device.** Their rows sync; the files do not, yet.
+- **Photos are backed up** to private object storage and served through short-lived signed URLs, so
+  a new phone shows them after signing in. **Videos are not**: they routinely exceed the 50 MB
+  object limit and would consume most of the storage quota, so they stay on the device that took
+  them.
 
 ## Stack
 
 - **UI:** Jetpack Compose, Material 3, Navigation Compose
 - **DI:** Koin
-- **Backend:** Supabase — Postgres, Auth, row-level security ([`supabase/`](supabase/))
-- **Persistence:** Supabase or Room (SQLite) behind one repository interface, Jetpack DataStore
-  for preferences
+- **Backend:** Supabase — Postgres, Auth, row-level security, Storage ([`supabase/`](supabase/))
+- **Persistence:** Room (SQLite) as the local source of truth, syncing to Supabase through an
+  outbox; Jetpack DataStore for preferences
+- **Sync:** WorkManager, constrained to connectivity
 - **Auth:** Credential Manager + Google ID tokens, via supabase-kt
 - **Networking:** Retrofit + OkHttp + kotlinx.serialization; supabase-kt for the backend
 - **Maps & places:** Google Maps Compose, Places SDK
@@ -83,6 +90,7 @@ build without them cannot get past the sign-in screen.
 app/src/main/java/dev/abhinav/artistpin/
 ├── core/            design system, auth, database (Room), DI modules, shared models
 ├── data/            repositories, backend client, third-party API clients
+├── data/sync/       the outbox, the drain, and the WorkManager job that runs it
 ├── feature/         one package per screen (home/map, artist, event, event edit, sign-in)
 └── navigation/      nav graph and routes
 
@@ -90,11 +98,17 @@ supabase/            schema, RLS policies and functions — the database in vers
 server/              Vercel proxy holding the Spotify credentials
 ```
 
-`ConcertRepository` is the boundary every screen goes through, and it is an interface with two
-implementations: `RoomConcertRepository` and `BackendConcertRepository`. That seam is why moving
-from one phone's SQLite to a shared Postgres changed no screen at all — the ViewModels already
-depended on exactly this surface. Which implementation is bound is decided by `USE_BACKEND` in
-`dataModule`.
+`ConcertRepository` is the boundary every screen goes through, and it is an interface. That seam is
+why moving from one phone's SQLite to a shared Postgres, and then to offline-first sync, changed no
+screen at all — the ViewModels already depended on exactly this surface.
+
+`USE_BACKEND` decides which implementation `dataModule` binds:
+
+- `RoomConcertRepository` — device-only, no account, the original.
+- `OfflineFirstConcertRepository` — Room for reads, an outbox for writes, drained by
+  [`data/sync`](app/src/main/java/dev/abhinav/artistpin/data/sync). This is what a backend build
+  runs.
+
 
 ## Docs
 
