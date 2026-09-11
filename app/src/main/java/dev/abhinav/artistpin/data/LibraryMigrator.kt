@@ -4,6 +4,7 @@ import dev.abhinav.artistpin.core.model.BackupData
 import dev.abhinav.artistpin.core.model.DataError
 import dev.abhinav.artistpin.core.model.DataResult
 import dev.abhinav.artistpin.data.backend.BackendApi
+import dev.abhinav.artistpin.data.backend.redactedMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -67,7 +68,8 @@ class LibraryMigrator(
         } catch (e: IOException) {
             DataResult.Failure(DataError.Network(e.message))
         } catch (e: Exception) {
-            DataResult.Failure(DataError.Unknown(e.message))
+            // Shown in a snackbar, so it must not carry the request's bearer token.
+            DataResult.Failure(DataError.Unknown(e.redactedMessage()))
         }
     }
 

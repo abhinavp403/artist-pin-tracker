@@ -70,6 +70,23 @@ class SummaryThumbnailTest {
         return (saved as DataResult.Success).data
     }
 
+    private suspend fun addVideo(eventId: String, sortIndex: Int) {
+        database.mediaDao().upsertMedia(
+            listOf(
+                EventMediaEntity(
+                    id = "video-$sortIndex",
+                    eventId = eventId,
+                    localPath = "/data/first-phone/video-$sortIndex.mp4",
+                    originalUri = "content://media/v$sortIndex",
+                    mimeType = "video/mp4",
+                    sortIndex = sortIndex,
+                    // Videos never upload, so this is the only state one can be in.
+                    remotePath = null,
+                ),
+            ),
+        )
+    }
+
     private suspend fun addPhoto(eventId: String, sortIndex: Int, remotePath: String?) {
         database.mediaDao().upsertMedia(
             listOf(
@@ -122,5 +139,32 @@ class SummaryThumbnailTest {
 
         assertNull(summary.thumbnailRemotePath)
         assertEquals("/data/first-phone/media-0.jpg", summary.thumbnailPath)
+    }
+
+    @Test
+    fun `a reel that opens with a video still gets a photo thumbnail`() = runTest(testDispatcher) {
+        val eventId = savedEventId()
+        addVideo(eventId, sortIndex = 0)
+        addPhoto(eventId, sortIndex = 1, remotePath = "user-1/$eventId/media-1.jpg")
+
+        val summary = repository.observeAllEvents().first().single()
+
+        // The video comes first in the reel but has no storage path and never will, so choosing
+        // it would leave every other device with a blank square in the lists while the show screen
+        // displays the photo fine.
+        assertEquals("/data/first-phone/media-1.jpg", summary.thumbnailPath)
+        assertEquals("user-1/$eventId/media-1.jpg", summary.thumbnailRemotePath)
+    }
+
+    @Test
+    fun `a show with only videos still has a local thumbnail`() = runTest(testDispatcher) {
+        val eventId = savedEventId()
+        addVideo(eventId, sortIndex = 0)
+
+        val summary = repository.observeAllEvents().first().single()
+
+        // The phone that recorded it can render a frame, so the preference must not discard it.
+        assertEquals("/data/first-phone/video-0.mp4", summary.thumbnailPath)
+        assertNull(summary.thumbnailRemotePath)
     }
 }

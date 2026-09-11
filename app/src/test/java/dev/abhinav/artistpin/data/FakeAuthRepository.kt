@@ -14,6 +14,10 @@ class FakeAuthRepository(
     private val _state = MutableStateFlow<AuthState>(AuthState.SignedIn(userId, "user@example.com"))
     override val state: StateFlow<AuthState> = _state
 
+    fun setState(state: AuthState) {
+        _state.value = state
+    }
+
     fun signOutLocally() {
         _state.value = AuthState.SignedOut
     }

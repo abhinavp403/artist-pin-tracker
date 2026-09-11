@@ -92,7 +92,7 @@ class SyncWorker(
         // abandons an entry after MAX_ATTEMPTS, so retrying is bounded rather than endless, and
         // WorkManager's backoff keeps it cheap.
         is DataResult.Failure -> {
-            if (result.error !is DataError.Network) {
+            if (result.error !is DataError.SyncUnavailable) {
                 Log.w(TAG, "Sync failed for a non-network reason: ${result.error}")
             }
             Result.retry()

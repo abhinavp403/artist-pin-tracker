@@ -3,6 +3,7 @@ package dev.abhinav.artistpin.core.auth
 import android.util.Log
 import dev.abhinav.artistpin.core.model.DataError
 import dev.abhinav.artistpin.core.model.DataResult
+import dev.abhinav.artistpin.data.backend.redactedMessage
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
@@ -76,8 +77,11 @@ class SupabaseAuthRepository(
         } catch (e: Exception) {
             // Logged rather than surfaced verbatim: auth failures carry provider detail that means
             // nothing to the user and occasionally echoes the token back.
-            Log.w(TAG, "Sign-in failed", e)
-            DataResult.Failure(DataError.Unknown(e.message))
+            val reason = e.redactedMessage()
+            // Not Log.w(TAG, msg, e): passing the throwable prints its message in the stack trace,
+            // which is the unredacted request — token included.
+            Log.w(TAG, "Sign-in failed: ${e.javaClass.simpleName}: $reason")
+            DataResult.Failure(DataError.Unknown(reason))
         }
 
     private companion object {

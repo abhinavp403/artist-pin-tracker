@@ -11,6 +11,13 @@ sealed interface DataError {
     /** Venue lookup needs a network round-trip; manual entry stays available when it fails. */
     data class Network(val message: String?) : DataError
     data object SearchUnavailable : DataError
+
+    /**
+     * The account could not be reached — no connection, or no usable session. Separate from
+     * [Network] so the message can say what is actually true: changes are safe and will sync later,
+     * rather than advice about venue search that has nothing to do with it.
+     */
+    data object SyncUnavailable : DataError
     data class Validation(val reason: String) : DataError
     data class Unknown(val message: String?) : DataError
 }

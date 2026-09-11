@@ -24,13 +24,17 @@ private const val EVENT_SUMMARY_SELECT = """
               FROM event_artists ea JOIN artists a ON a.id = ea.artistId
              WHERE ea.eventId = e.id AND ea.billing = 'SUPPORT') AS supportNames,
            (SELECT COUNT(*) FROM event_media m WHERE m.eventId = e.id) AS mediaCount,
+           -- Photos before videos. Videos never upload, so a reel that opens with one would give
+           -- every other device a thumbnail with no reachable source — a blank square in the lists
+           -- while the show screen displays the photos fine. A video still wins when it is all
+           -- there is, since this device can render a local frame from it.
            (SELECT m.localPath FROM event_media m WHERE m.eventId = e.id
-             ORDER BY m.sortIndex LIMIT 1) AS thumbnailPath,
+             ORDER BY (m.mimeType LIKE 'video/%'), m.sortIndex, m.id LIMIT 1) AS thumbnailPath,
            -- The same row's object-storage path. Needed because a device that never held the file
            -- has a localPath pointing at another phone's storage, which is why list thumbnails
            -- were blank after signing in on a new device while the show screen showed them fine.
            (SELECT m.remotePath FROM event_media m WHERE m.eventId = e.id
-             ORDER BY m.sortIndex LIMIT 1) AS thumbnailRemotePath
+             ORDER BY (m.mimeType LIKE 'video/%'), m.sortIndex, m.id LIMIT 1) AS thumbnailRemotePath
       FROM events e
       JOIN venues v ON v.id = e.venueId
       JOIN cities c ON c.id = v.cityId

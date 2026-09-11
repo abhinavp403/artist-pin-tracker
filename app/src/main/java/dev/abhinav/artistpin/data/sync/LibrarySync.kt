@@ -12,6 +12,7 @@ import dev.abhinav.artistpin.core.model.DataResult
 import dev.abhinav.artistpin.data.RoomBackupRepository
 import dev.abhinav.artistpin.data.backend.BackendApi
 import dev.abhinav.artistpin.data.backend.EventMediaDto
+import dev.abhinav.artistpin.data.backend.redactedMessage
 import dev.abhinav.artistpin.data.backend.SaveEventParams
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -71,6 +72,17 @@ class LibrarySync(
     val pendingCount: Flow<Int> = outbox.observePendingCount()
 
     suspend fun syncNow(): DataResult<SyncResult> = withContext(ioDispatcher) {
+        // No usable session means nothing below can succeed — and every entry that tried would be
+        // recorded as refused, burning the retry budget that exists for genuine refusals. Offline
+        // with an expired token, or a cold start before the session has loaded, would otherwise
+        // permanently retire photos the server never saw. Treat it like having no signal: stop,
+        // ask to come back later, count nothing.
+        if (auth.state.value !is AuthState.SignedIn) {
+            Log.d(TAG, "No session yet (${auth.state.value::class.simpleName}); sync deferred")
+            scheduler.requestSync()
+            return@withContext DataResult.Failure(DataError.SyncUnavailable)
+        }
+
         try {
             queuePendingUploads()
             val (pushed, dropped) = drain()
@@ -98,11 +110,15 @@ class LibrarySync(
             // happens to reopen it. Asking here means WorkManager waits for real connectivity and
             // finishes the job on its own.
             scheduler.requestSync()
-            DataResult.Failure(DataError.Network(e.message))
+            DataResult.Failure(DataError.SyncUnavailable)
         } catch (e: Exception) {
-            Log.w(TAG, "Sync failed: ${e.redacted()}")
+            // Redacted before it becomes a DataError, not just before it is logged: the Unknown
+            // message is rendered verbatim in the Sync-now snackbar, which is where a token would
+            // otherwise end up in a screenshot.
+            val reason = e.redactedMessage()
+            Log.w(TAG, "Sync failed: $reason")
             scheduler.requestSync()
-            DataResult.Failure(DataError.Unknown(e.message))
+            DataResult.Failure(DataError.Unknown(reason))
         }
     }
 
@@ -127,10 +143,18 @@ class LibrarySync(
 
             val cause = sent.exceptionOrNull()
             if (cause is CancellationException) throw cause
+
+            // The session went away mid-drain (signed out, or a refresh failed). Not a refusal of
+            // this entry — nothing was even sent — so it stops the drain without counting against
+            // the retry budget, exactly as losing signal would.
+            if (cause is SessionUnavailableException) {
+                Log.d(TAG, "Session lost mid-drain; stopping without counting a failure")
+                break
+            }
             // Redacted, not raw. supabase-kt puts the full request headers into its exception
             // message, which includes the session's bearer token — logging the exception verbatim
             // writes a live credential to logcat, and recordFailure would store it in SQLite.
-            val reason = cause.redacted()
+            val reason = cause.redactedMessage()
             Log.w(TAG, "Could not push ${entry.operation} for ${entry.entityId}: $reason")
             outbox.recordFailure(entry.id, reason)
 
@@ -290,7 +314,7 @@ class LibrarySync(
         }
 
         val userId = (auth.state.value as? AuthState.SignedIn)?.userId
-            ?: throw IllegalStateException("Not signed in; cannot upload media")
+            ?: throw SessionUnavailableException()
 
         // The first segment is what the storage policies read ownership from, so it is not
         // cosmetic — see 0011_media_storage.sql.
@@ -303,20 +327,6 @@ class LibrarySync(
 
     private fun String.dotted(): String = if (isBlank()) "" else ".$this"
 
-    /**
-     * A loggable one-liner with credentials stripped.
-     *
-     * supabase-kt's REST exceptions carry the whole request — including `Authorization: Bearer …` —
-     * in their message. That message reaches logcat and the outbox's lastError column, so it has to
-     * be cleaned before either.
-     */
-    private fun Throwable?.redacted(): String {
-        val raw = this?.message ?: return this?.javaClass?.simpleName ?: "unknown"
-        return raw.substringBefore("Headers:")
-            .replace(Regex("(?i)(bearer|apikey=?\\[?)\\s*[A-Za-z0-9._\\-]+"), "$1 <redacted>")
-            .trim()
-            .take(300)
-    }
 
     /**
      * Queues uploads for photos whose bytes have never left the phone (plan item D4).
@@ -395,3 +405,9 @@ class LibrarySync(
         const val MAX_UPLOAD_BYTES = 50L * 1024 * 1024
     }
 }
+
+/**
+ * There is no signed-in session to act as. Deliberately an [IOException]: to the drain it means the
+ * same as having no signal — stop and come back — rather than "the server refused this entry".
+ */
+class SessionUnavailableException : IOException("No usable session")
