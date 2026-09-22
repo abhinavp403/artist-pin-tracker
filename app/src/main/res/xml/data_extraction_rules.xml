@@ -1,19 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+   Backup and device-transfer rules for API 31+.
+
+   The app's data is already recoverable from Supabase on any signed-in device, so what backup adds
+   here is convenience, not the restore path. What it must not add is a copy of the session: the
+   Supabase refresh token lives in the default SharedPreferences file (via multiplatform-settings),
+   and a cloud backup would put a live credential in Google Drive — the one place the rest of this
+   app goes out of its way to keep tokens out of. Excluding it costs a sign-in after a restore.
+
+   Device transfer excludes it for the same reason: a phone-to-phone transfer is still a second
+   device holding a token that was issued to the first.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude
+            domain="sharedpref"
+            path="." />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude
+            domain="sharedpref"
+            path="." />
     </device-transfer>
-    -->
 </data-extraction-rules>

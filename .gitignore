@@ -19,3 +19,11 @@ local.properties
 # Supabase project credentials — never commit
 supabase/*.rtf
 supabase/.env*
+
+# Signing keys. These belong outside the repo entirely; the pattern is a backstop for the day
+# one gets dropped in here by accident.
+*.jks
+*.keystore
+
+# Android Studio's Generate Signed Bundle wizard writes here, outside build/.
+/app/release/

@@ -27,6 +27,11 @@ val mapsApiKey: String = providers
 /** Overridable from local.properties for anyone running their own proxy. */
 val DEFAULT_API_BASE_URL = "https://artistpin-proxy-abhinavp403-3191s-projects.vercel.app/api/"
 
+// Release signing. The keystore lives outside the repo and its path and passwords come from
+// local.properties, which is gitignored — none of it is committable. RELEASE_STORE_FILE is
+// resolved against the repository root, so an absolute path is the safest thing to put there.
+val releaseStoreFile: String = localProperty("RELEASE_STORE_FILE")
+
 android {
     namespace = "dev.abhinav.artistpin"
     compileSdk {
@@ -75,11 +80,37 @@ android {
         )
     }
 
+    signingConfigs {
+        // Only declared when local.properties actually points at a keystore. The alternative —
+        // always creating it and letting storeFile be null — fails the build for anyone who
+        // clones this without the keystore, including a release build they never asked for.
+        if (releaseStoreFile.isNotBlank()) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = localProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = localProperty("RELEASE_KEY_ALIAS")
+                keyPassword = localProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Null when no keystore is configured, which leaves the APK unsigned rather than
+            // silently falling back to the debug key. A debug-signed "release" installs happily
+            // and then can never be upgraded by a properly signed one — the signatures differ,
+            // so Android rejects it and the only way out is uninstalling and losing local state.
+            signingConfig = signingConfigs.findByName("release")
+
+            // R8. The default optimize file plus our own rules below; anything a library needs
+            // ships with the library as consumer rules.
             optimization {
-                enable = false
+                enable = true
             }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
     compileOptions {
@@ -111,6 +142,31 @@ kotlin {
 
 room {
     schemaDirectory("$projectDir/schemas")
+}
+
+// Every other way a release build can be misconfigured announces itself: missing Supabase values
+// open the config screen, a missing Maps key leaves a grey map, an unsigned APK won't install.
+// USE_BACKEND is the exception. False binds RoomConcertRepository, and the result looks entirely
+// correct — sign-in works, shows save — while nothing ever syncs and no photo is backed up. It
+// also defaults to false, so a fresh checkout produces exactly that build.
+val verifyReleaseConfig = tasks.register("verifyReleaseConfig") {
+    group = "verification"
+    description = "Fails a release build that would never sync, because USE_BACKEND is not true."
+
+    // Read at configuration time and captured as a plain value, so the action holds no reference
+    // to the project and the configuration cache stays usable.
+    val backendEnabled = localProperty("USE_BACKEND").equals("true", ignoreCase = true)
+
+    doLast {
+        check(backendEnabled) {
+            "USE_BACKEND is not true in local.properties: this build would keep everything on " +
+                "the one device, syncing nothing and backing up no photos."
+        }
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
+    dependsOn(verifyReleaseConfig)
 }
 
 dependencies {

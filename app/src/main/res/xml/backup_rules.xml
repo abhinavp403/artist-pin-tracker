@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+   Auto Backup rules for API 30 and below. API 31+ reads data_extraction_rules.xml instead, and the
+   two files have to agree — see the comment there for why the session is excluded.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- Supabase keeps the refresh token in the default SharedPreferences file
+         (dev.abhinav.artistpin_preferences.xml, via multiplatform-settings). Backing that up ships
+         a live credential to Google Drive. Everything else — the Room database, DataStore
+         settings — still backs up; excluding this only means signing in again after a restore,
+         which is what a restore does anyway. -->
+    <exclude
+        domain="sharedpref"
+        path="." />
 </full-backup-content>
