@@ -30,8 +30,6 @@ data class EventDraft(
     val artistNames: List<String>,
     val supportArtistNames: List<String> = emptyList(),
     val title: String? = null,
-    val notes: String? = null,
-    val rating: Int? = null,
 )
 
 /**

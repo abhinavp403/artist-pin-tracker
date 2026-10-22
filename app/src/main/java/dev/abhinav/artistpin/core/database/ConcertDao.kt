@@ -13,7 +13,6 @@ private const val EVENT_SUMMARY_SELECT = """
     SELECT e.id AS id,
            e.dateEpochDay AS dateEpochDay,
            e.title AS title,
-           e.rating AS rating,
            v.id AS venueId,
            v.name AS venueName,
            c.name AS cityName,

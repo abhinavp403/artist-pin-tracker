@@ -54,7 +54,7 @@ class RoomBackupRepository(
                 BackupArtist(it.id, it.name, it.imageUrl, it.genres, it.spotifyUrl)
             },
             events = concertDao.allEvents().map {
-                BackupEvent(it.id, it.venueId, it.dateEpochDay, it.title, it.notes, it.rating)
+                BackupEvent(it.id, it.venueId, it.dateEpochDay, it.title)
             },
             eventArtists = concertDao.allEventArtists().map {
                 BackupEventArtist(it.eventId, it.artistId, it.billing.name)
@@ -117,7 +117,7 @@ class RoomBackupRepository(
         )
         concertDao.insertEvents(
             backup.events.map {
-                EventEntity(it.id, it.venueId, it.dateEpochDay, it.title, it.notes, it.rating)
+                EventEntity(it.id, it.venueId, it.dateEpochDay, it.title)
             },
         )
         concertDao.insertEventArtists(

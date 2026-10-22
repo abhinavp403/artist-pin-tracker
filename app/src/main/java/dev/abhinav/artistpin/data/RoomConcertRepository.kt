@@ -186,8 +186,6 @@ class RoomConcertRepository(
                 venueId = venueId,
                 dateEpochDay = draft.date.toEpochDay(),
                 title = draft.title?.trim()?.takeIf { it.isNotEmpty() },
-                notes = draft.notes?.trim()?.takeIf { it.isNotEmpty() },
-                rating = draft.rating,
             ),
             artistRefs = headliners.map { EventArtistCrossRef(eventId, it.id, Billing.HEADLINER) } +
                 support.map { EventArtistCrossRef(eventId, it.id, Billing.SUPPORT) },

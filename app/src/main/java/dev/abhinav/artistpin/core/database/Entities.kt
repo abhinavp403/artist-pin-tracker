@@ -74,8 +74,6 @@ data class EventEntity(
     val venueId: String,
     val dateEpochDay: Long,
     val title: String? = null,
-    val notes: String? = null,
-    val rating: Int? = null,
 )
 
 @Entity(
@@ -219,7 +217,6 @@ data class EventSummaryRow(
     val id: String,
     val dateEpochDay: Long,
     val title: String?,
-    val rating: Int?,
     val venueId: String,
     val venueName: String,
     val cityName: String,

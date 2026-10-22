@@ -64,8 +64,6 @@ data class ConcertEvent(
     val artists: List<ArtistBilling>,
     val media: List<EventMedia>,
     val title: String? = null,
-    val notes: String? = null,
-    val rating: Int? = null,
 ) {
     val headliners: List<Artist> get() = artists.filter { it.billing == Billing.HEADLINER }.map { it.artist }
 
@@ -107,9 +105,7 @@ data class EventSummary(
     val artistNames: List<String>,
     val mediaCount: Int,
     val thumbnailPath: String?,
-    /** Where that thumbnail lives in object storage, when the local file is not on this device. */
     val thumbnailRemotePath: String? = null,
-    val rating: Int?,
 )
 
 data class ArtistDeletionImpact(

@@ -136,4 +136,16 @@ select '10. storage_path column', 'event_media',
                    and column_name = 'storage_path'
             ) then 'PASS' else 'FAIL — column missing' end
 
+union all
+
+-- 11. The two columns no screen ever used are gone.
+--     Dropped in 0013 along with the view column and the function bodies that carried them; this
+--     catches a database that ran the earlier migrations but not that one.
+select '11. notes and rating dropped', 'events',
+       case when not exists (
+                select 1 from information_schema.columns
+                 where table_schema = 'public' and table_name = 'events'
+                   and column_name in ('notes', 'rating')
+            ) then 'PASS' else 'FAIL — column still present' end
+
 order by 1, 2;

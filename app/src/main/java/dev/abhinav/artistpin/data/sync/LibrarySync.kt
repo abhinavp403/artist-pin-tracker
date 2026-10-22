@@ -209,8 +209,6 @@ class LibrarySync(
                         artistNames = p.artistNames,
                         supportNames = p.supportNames,
                         title = p.title,
-                        notes = p.notes,
-                        rating = p.rating,
                     ),
                 )
             }

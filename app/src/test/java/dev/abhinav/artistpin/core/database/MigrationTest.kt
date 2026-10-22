@@ -162,6 +162,7 @@ class MigrationTest {
     private companion object {
         const val TEST_DB = "migration-test.db"
         const val TEST_DB_7 = "migration-test-7.db"
+        const val TEST_DB_11 = "migration-test-11.db"
         const val TEST_DB_6 = "migration-test-6.db"
         const val TEST_DB_5 = "migration-test-5.db"
         const val TEST_DB_4 = "migration-test-4.db"
@@ -203,6 +204,48 @@ class MigrationTest {
         db.query("SELECT COUNT(*) FROM sync_outbox").use { cursor ->
             assertTrue(cursor.moveToFirst())
             assertEquals(0, cursor.getInt(0))
+        }
+        db.close()
+    }
+
+    @Test
+    fun `migrating to version 11 drops notes and rating but keeps the show`() {
+        helper.createDatabase(TEST_DB_11, 10).apply {
+            execSQL("INSERT INTO cities (id, name, country) VALUES ('c1', 'Queens', 'US')")
+            execSQL(
+                "INSERT INTO venues (id, name, cityId, latitude, longitude) " +
+                    "VALUES ('v1', 'Knockdown Center', 'c1', 40.71, -73.92)",
+            )
+            // Written with both columns populated. No release ever put a value in either one, but
+            // the migration must not depend on that to avoid destroying the row around them.
+            execSQL(
+                "INSERT INTO events (id, venueId, dateEpochDay, title, notes, rating) " +
+                    "VALUES ('e1', 'v1', 20253, 'Opening night', 'some note', 5)",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB_11,
+            11,
+            true,
+            ArtistPinDatabase.MIGRATION_10_11,
+        )
+
+        // The table is rebuilt rather than altered, so the risk is losing rows, not columns.
+        db.query("SELECT id, venueId, dateEpochDay, title FROM events").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("e1", cursor.getString(0))
+            assertEquals("v1", cursor.getString(1))
+            assertEquals(20253, cursor.getInt(2))
+            assertEquals("Opening night", cursor.getString(3))
+            assertEquals(1, cursor.count)
+        }
+        // runMigrationsAndValidate would already fail on a schema mismatch; this says out loud
+        // which columns are meant to be gone.
+        db.query("SELECT * FROM events").use { cursor ->
+            assertEquals(-1, cursor.getColumnIndex("notes"))
+            assertEquals(-1, cursor.getColumnIndex("rating"))
         }
         db.close()
     }

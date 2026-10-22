@@ -75,8 +75,6 @@ data class BackupEvent(
     val venueId: String,
     val dateEpochDay: Long,
     val title: String? = null,
-    val notes: String? = null,
-    val rating: Int? = null,
 )
 
 @Serializable

@@ -82,7 +82,6 @@ data class EventSummaryDto(
     val id: String,
     @SerialName("event_date") val eventDate: String,
     val title: String? = null,
-    val rating: Int? = null,
     @SerialName("venue_id") val venueId: String,
     @SerialName("venue_name") val venueName: String,
     @SerialName("city_id") val cityId: String,
@@ -124,8 +123,6 @@ data class EventDetailDto(
     val id: String,
     @SerialName("event_date") val eventDate: String,
     val title: String? = null,
-    val notes: String? = null,
-    val rating: Int? = null,
     @SerialName("venues") val venue: VenueDto,
     @SerialName("event_artists") val artists: List<EventArtistDto> = emptyList(),
     @SerialName("event_media") val media: List<EventMediaDto> = emptyList(),
@@ -176,6 +173,4 @@ data class SaveEventParams(
     @SerialName("p_artist_names") val artistNames: List<String>,
     @SerialName("p_support_names") val supportNames: List<String> = emptyList(),
     @SerialName("p_title") val title: String? = null,
-    @SerialName("p_notes") val notes: String? = null,
-    @SerialName("p_rating") val rating: Int? = null,
 )

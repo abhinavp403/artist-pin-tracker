@@ -59,7 +59,6 @@ class BackendBackupRepositoryTest {
             assertEquals(1, parsed.summary.shows)
             assertEquals("Knockdown Center", parsed.venues.single().name)
             assertEquals(20253L, parsed.events.single().dateEpochDay)
-            assertEquals(5, parsed.events.single().rating)
         }
 
     @Test

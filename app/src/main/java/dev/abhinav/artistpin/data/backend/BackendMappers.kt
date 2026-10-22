@@ -94,7 +94,6 @@ fun EventSummaryDto.toModel(): EventSummary {
         artistNames = headliners + support,
         mediaCount = mediaCount,
         thumbnailPath = thumbnailUrl,
-        rating = rating,
     )
 }
 
@@ -129,8 +128,6 @@ fun EventDetailDto.toModel(): ConcertEvent? {
         },
         media = media.sortedBy { it.sortIndex }.map { it.toModel() },
         title = title,
-        notes = notes,
-        rating = rating,
     )
 }
 

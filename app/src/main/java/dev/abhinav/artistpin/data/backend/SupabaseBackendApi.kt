@@ -36,7 +36,7 @@ class SupabaseBackendApi(
     // reads from the `events` table rather than the event_summaries view — a view's joins are
     // opaque to the embedding syntax.
     private val eventDetailColumns = Columns.raw(
-        "id, event_date, title, notes, rating, " +
+        "id, event_date, title, " +
             "venues(*, cities(*)), " +
             "event_artists(billing, artists(*)), " +
             "event_media(*)",

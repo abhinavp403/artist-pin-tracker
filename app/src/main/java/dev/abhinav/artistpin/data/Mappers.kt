@@ -96,7 +96,6 @@ fun EventSummaryRow.toModel(): EventSummary {
         mediaCount = mediaCount,
         thumbnailPath = thumbnailPath,
         thumbnailRemotePath = thumbnailRemotePath,
-        rating = rating,
     )
 }
 
@@ -123,6 +122,4 @@ fun EventWithDetails.toModel(billingByArtistId: Map<String, Billing>) = ConcertE
     }.sortedWith(compareBy({ it.billing != Billing.HEADLINER }, { it.artist.name })),
     media = media.sortedBy { it.sortIndex }.map { it.toModel() },
     title = event.title,
-    notes = event.notes,
-    rating = event.rating,
 )

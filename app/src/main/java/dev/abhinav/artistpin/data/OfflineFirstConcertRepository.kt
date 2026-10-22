@@ -125,8 +125,6 @@ class OfflineFirstConcertRepository(
                         supportNames = draft.supportArtistNames.map { it.trim() }
                             .filter { it.isNotEmpty() },
                         title = draft.title?.trim()?.takeIf { it.isNotEmpty() },
-                        notes = draft.notes?.trim()?.takeIf { it.isNotEmpty() },
-                        rating = draft.rating,
                     ),
                 ),
                 supersedePrevious = true,

@@ -57,8 +57,6 @@ data class SaveEventPayload(
     val artistNames: List<String>,
     val supportNames: List<String> = emptyList(),
     val title: String? = null,
-    val notes: String? = null,
-    val rating: Int? = null,
 )
 
 @Serializable

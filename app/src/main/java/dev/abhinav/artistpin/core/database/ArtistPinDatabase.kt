@@ -28,7 +28,7 @@ class Converters {
         EventMediaEntity::class,
         SyncOutboxEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -40,6 +40,44 @@ abstract class ArtistPinDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "artistpin.db"
+
+        /**
+         * Drops `notes` and `rating` from events.
+         *
+         * Both were carried through every layer — Room, the backup format, the sync payload and
+         * Postgres — since the first schema, and no screen ever read or wrote either one. Nothing
+         * is lost because nothing was ever stored: no version of this app had a field for them.
+         *
+         * Rebuilt rather than `ALTER TABLE ... DROP COLUMN`, which SQLite only learned in 3.35 —
+         * newer than the SQLite on an API 28 device, which this app still supports.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS events_new (
+                        id TEXT NOT NULL,
+                        venueId TEXT NOT NULL,
+                        dateEpochDay INTEGER NOT NULL,
+                        title TEXT,
+                        PRIMARY KEY(id),
+                        FOREIGN KEY(venueId) REFERENCES venues(id)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "INSERT INTO events_new (id, venueId, dateEpochDay, title) " +
+                        "SELECT id, venueId, dateEpochDay, title FROM events",
+                )
+                connection.execSQL("DROP TABLE events")
+                connection.execSQL("ALTER TABLE events_new RENAME TO events")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS index_events_venueId ON events (venueId)")
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_events_dateEpochDay ON events (dateEpochDay)",
+                )
+            }
+        }
 
         /**
          * Clears the upload-failure count on every photo.

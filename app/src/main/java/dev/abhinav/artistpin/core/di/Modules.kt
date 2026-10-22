@@ -91,7 +91,8 @@ val databaseModule = module {
             ArtistPinDatabase.MIGRATION_6_7,
             ArtistPinDatabase.MIGRATION_7_8,
             ArtistPinDatabase.MIGRATION_8_9,
-            ArtistPinDatabase.MIGRATION_9_10).build()
+            ArtistPinDatabase.MIGRATION_9_10,
+            ArtistPinDatabase.MIGRATION_10_11).build()
     }
     single { get<ArtistPinDatabase>().concertDao() }
     single { get<ArtistPinDatabase>().artistDao() }
