@@ -13,6 +13,7 @@ import dev.abhinav.artistpin.core.model.ConcertEvent
 import dev.abhinav.artistpin.core.model.DataError
 import dev.abhinav.artistpin.core.model.DataResult
 import dev.abhinav.artistpin.core.model.EventSummary
+import dev.abhinav.artistpin.core.model.LibraryStats
 import dev.abhinav.artistpin.core.model.Venue
 import dev.abhinav.artistpin.core.model.VenuePin
 import dev.abhinav.artistpin.core.model.onSuccess
@@ -79,6 +80,8 @@ class OfflineFirstConcertRepository(
 
     override fun observeEventsForArtist(artistId: String): Flow<List<EventSummary>> =
         local.observeEventsForArtist(artistId)
+
+    override fun observeStats(): Flow<LibraryStats> = local.observeStats()
 
     override fun observeArtistSummaries(): Flow<List<ArtistSummary>> = local.observeArtistSummaries()
 

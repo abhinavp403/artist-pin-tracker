@@ -228,6 +228,21 @@ interface ConcertDao {
         insertEventArtists(artistRefs)
     }
 
+    /** Every show as a date plus the three ids that identify where it was. */
+    @Query(
+        """
+        SELECT e.dateEpochDay AS dateEpochDay,
+               c.id AS cityId,
+               c.country AS country,
+               v.id AS venueId
+          FROM events e
+          JOIN venues v ON v.id = e.venueId
+          JOIN cities c ON c.id = v.cityId
+         ORDER BY e.dateEpochDay ASC
+        """,
+    )
+    fun observeEventStatsRows(): Flow<List<EventStatsRow>>
+
     @Transaction
     suspend fun deleteEventAndPrune(eventId: String) {
         deleteEventById(eventId)

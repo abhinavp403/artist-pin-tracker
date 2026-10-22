@@ -15,3 +15,7 @@ data class ArtistDetailRoute(val artistId: String)
 /** [eventId] null means "new show"; otherwise the screen edits that event. */
 @Serializable
 data class EventEditRoute(val eventId: String? = null)
+
+/** Counts and streaks over the whole library. Takes no arguments: it is always everything. */
+@Serializable
+data object StatsRoute

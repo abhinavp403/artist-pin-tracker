@@ -9,6 +9,7 @@ import dev.abhinav.artistpin.core.model.CityPin
 import dev.abhinav.artistpin.core.model.ConcertEvent
 import dev.abhinav.artistpin.core.model.DataResult
 import dev.abhinav.artistpin.core.model.EventSummary
+import dev.abhinav.artistpin.core.model.LibraryStats
 import dev.abhinav.artistpin.core.model.Venue
 import dev.abhinav.artistpin.core.model.VenuePin
 import kotlinx.coroutines.flow.Flow
@@ -65,6 +66,8 @@ interface ConcertRepository {
     fun observeAllEvents(): Flow<List<EventSummary>>
 
     fun observeEventsForArtist(artistId: String): Flow<List<EventSummary>>
+
+    fun observeStats(): Flow<LibraryStats>
 
     fun observeArtistSummaries(): Flow<List<ArtistSummary>>
 

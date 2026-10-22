@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.CloudUpload
@@ -155,6 +156,7 @@ fun HomeScreen(
     onOpenArtist: (String) -> Unit,
     onOpenEvent: (String) -> Unit,
     onAddEvent: () -> Unit,
+    onOpenStats: () -> Unit,
     onSignOut: () -> Unit,
     mapViewModel: WorldMapViewModel = koinViewModel(),
     artistsViewModel: ArtistsViewModel = koinViewModel(),
@@ -331,6 +333,10 @@ fun HomeScreen(
                 onOverflowDismiss = mapViewModel::onOverflowDismiss,
                 onBackUp = mapViewModel::onBackUpRequested,
                 onRestore = mapViewModel::onRestoreRequested,
+                onOpenStats = {
+                    mapViewModel.onOverflowDismiss()
+                    onOpenStats()
+                },
                 showUploadAction = uiState.showUploadAction,
                 onUploadLibrary = mapViewModel::onUploadLibraryRequested,
                 showSyncAction = uiState.showSyncAction,
@@ -411,6 +417,7 @@ private fun TopChrome(
     onOverflowDismiss: () -> Unit,
     onBackUp: () -> Unit,
     onRestore: () -> Unit,
+    onOpenStats: () -> Unit,
     showUploadAction: Boolean,
     onUploadLibrary: () -> Unit,
     showSyncAction: Boolean,
@@ -462,6 +469,11 @@ private fun TopChrome(
                     text = { Text("Restore from a file") },
                     onClick = onRestore,
                     leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
+                )
+                DropdownMenuItem(
+                    text = { Text("Your shows, counted") },
+                    onClick = onOpenStats,
+                    leadingIcon = { Icon(Icons.Default.BarChart, contentDescription = null) },
                 )
                 if (showUploadAction) {
                     DropdownMenuItem(

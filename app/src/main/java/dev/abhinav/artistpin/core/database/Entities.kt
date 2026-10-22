@@ -213,6 +213,16 @@ data class VenuePinRow(
     val headlinerImageUrl: String?,
 )
 
+/**
+ * One show, reduced to the four things the stats screen counts by.
+ */
+data class EventStatsRow(
+    val dateEpochDay: Long,
+    val cityId: String,
+    val country: String,
+    val venueId: String,
+)
+
 data class EventSummaryRow(
     val id: String,
     val dateEpochDay: Long,

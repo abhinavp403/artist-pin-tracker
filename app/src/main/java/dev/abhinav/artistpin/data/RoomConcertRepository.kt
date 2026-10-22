@@ -23,6 +23,7 @@ import dev.abhinav.artistpin.core.model.ConcertEvent
 import dev.abhinav.artistpin.core.model.DataError
 import dev.abhinav.artistpin.core.model.DataResult
 import dev.abhinav.artistpin.core.model.EventSummary
+import dev.abhinav.artistpin.core.model.LibraryStats
 import dev.abhinav.artistpin.core.model.Venue
 import dev.abhinav.artistpin.core.model.VenuePin
 import kotlinx.coroutines.CancellationException
@@ -115,6 +116,9 @@ class RoomConcertRepository(
 
     override fun observeEventsForArtist(artistId: String): Flow<List<EventSummary>> =
         concertDao.observeEventsForArtist(artistId).map { rows -> rows.map { it.toModel() } }
+
+    override fun observeStats(): Flow<LibraryStats> =
+        concertDao.observeEventStatsRows().map { it.toLibraryStats() }
 
     override fun observeArtistSummaries(): Flow<List<ArtistSummary>> =
         artistDao.observeArtistSummaries().map { rows -> rows.map { it.toModel() } }

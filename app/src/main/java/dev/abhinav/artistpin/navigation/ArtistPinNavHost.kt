@@ -26,6 +26,7 @@ import dev.abhinav.artistpin.feature.auth.SignInScreen
 import dev.abhinav.artistpin.feature.eventdetail.EventDetailScreen
 import dev.abhinav.artistpin.feature.eventedit.EventEditScreen
 import dev.abhinav.artistpin.feature.home.HomeScreen
+import dev.abhinav.artistpin.feature.stats.StatsScreen
 import dev.abhinav.artistpin.data.sync.LibrarySync
 import dev.abhinav.artistpin.feature.home.rememberHomeState
 import kotlinx.coroutines.launch
@@ -121,8 +122,13 @@ fun ArtistPinApp(
                 onOpenArtist = { navController.navigate(ArtistDetailRoute(it)) },
                 onOpenEvent = { navController.navigate(EventDetailRoute(it)) },
                 onAddEvent = { navController.navigate(EventEditRoute()) },
+                onOpenStats = { navController.navigate(StatsRoute) },
                 onSignOut = onSignOut,
             )
+        }
+
+        composable<StatsRoute> {
+            StatsScreen(onBack = navController::popBackStack)
         }
 
         composable<EventDetailRoute> {

@@ -53,6 +53,7 @@ import dev.abhinav.artistpin.data.SpotifyArtistImageSource
 import dev.abhinav.artistpin.data.VenueSearchService
 import dev.abhinav.artistpin.feature.artists.ArtistDetailViewModel
 import dev.abhinav.artistpin.feature.artists.ArtistsViewModel
+import dev.abhinav.artistpin.feature.stats.StatsViewModel
 import dev.abhinav.artistpin.feature.eventdetail.EventDetailViewModel
 import dev.abhinav.artistpin.feature.eventedit.EventEditViewModel
 import dev.abhinav.artistpin.feature.worldmap.WorldMapViewModel
@@ -259,6 +260,7 @@ val viewModelModule = module {
     viewModelOf(::EventEditViewModel)
     viewModelOf(::ArtistsViewModel)
     viewModelOf(::ArtistDetailViewModel)
+    viewModelOf(::StatsViewModel)
 }
 
 val appModules =
