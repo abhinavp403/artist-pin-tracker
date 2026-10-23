@@ -97,11 +97,6 @@ class OfflineFirstConcertRepository(
     override fun observeEvent(eventId: String): Flow<ConcertEvent?> = local.observeEvent(eventId)
 
     /**
-     * Artwork lookups stay local and unqueued. They are a cache of somebody else's data, cheap to
-     * repeat, and queueing them would fill the outbox with work that has no user-visible effect —
-     * the sync's job is the user's own library, not a mirror of MusicBrainz.
-     */
-    /**
      * Runs the local lookup and sends what it finds to the shared catalog.
      *
      * Both halves run for as long as the caller keeps this alive. Queued rather than pushed

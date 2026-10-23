@@ -94,8 +94,11 @@ private fun StatsList(stats: LibraryStats) {
         item { Totals(stats) }
 
         item { SectionTitle("Shows per year") }
+        // Hoisted: inside the items lambda this rescans every year for each visible row, on each
+        // recomposition, to arrive at the same number.
+        val busiestYear = stats.showsPerYear.maxOf { it.shows }
         items(stats.showsPerYear, key = { it.year }) { tally ->
-            YearRow(tally = tally, busiest = stats.showsPerYear.maxOf { it.shows })
+            YearRow(tally = tally, busiest = busiestYear)
         }
 
         item { SectionTitle("Patterns") }
