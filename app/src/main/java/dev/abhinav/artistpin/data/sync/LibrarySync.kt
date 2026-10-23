@@ -259,6 +259,21 @@ class LibrarySync(
                 uploadOne(p)
             }
 
+            SyncOperation.SET_ARTIST_PROFILE -> {
+                val p = json.decodeFromString(
+                    SetArtistProfilePayload.serializer(),
+                    entry.payloadJson,
+                )
+                // Same resolution as RENAME_ARTIST: the catalog knows this artist by name, under
+                // an id this device may never have seen.
+                api.setArtistProfile(
+                    artistId = api.findOrCreateArtist(p.artistName),
+                    imageUrl = p.imageUrl,
+                    genres = p.genres,
+                    spotifyUrl = p.spotifyUrl,
+                )
+            }
+
             SyncOperation.DELETE_STORED_MEDIA -> {
                 val p = json.decodeFromString(
                     DeleteStoredMediaPayload.serializer(),

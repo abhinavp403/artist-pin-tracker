@@ -34,6 +34,20 @@ enum class SyncOperation {
      * told it was gone.
      */
     DELETE_STORED_MEDIA,
+
+    /**
+     * Send artwork and genres up to the shared catalog.
+     *
+     * Each device looks an artist up for itself the first time it meets one, and until this
+     * existed that result stayed on the device: the catalog row kept a null image, and the next
+     * full pull — which rebuilds the artist table from the server — put that null back over the
+     * portrait that had just been fetched. The lookup would then not run again until the app was
+     * restarted, so a newly added artist showed initials for the rest of the session.
+     *
+     * `catalog_set_artist_profile` only fills blanks, so this can never overwrite a better answer
+     * somebody else's lookup already found.
+     */
+    SET_ARTIST_PROFILE,
 }
 
 /**
@@ -106,4 +120,18 @@ data class UploadMediaPayload(
     val eventId: String,
     val localPath: String,
     val mimeType: String,
+)
+
+/**
+ * One artist's resolved artwork, by name.
+ *
+ * By name rather than by id for the same reason [RenameArtistPayload] is: the id Room generated
+ * when this artist was first typed in is meaningless to a catalog that deduplicates by name.
+ */
+@Serializable
+data class SetArtistProfilePayload(
+    val artistName: String,
+    val imageUrl: String? = null,
+    val genres: String = "",
+    val spotifyUrl: String? = null,
 )

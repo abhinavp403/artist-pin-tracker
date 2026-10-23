@@ -27,8 +27,11 @@ import dev.abhinav.artistpin.data.sync.SyncScheduler
 import dev.abhinav.artistpin.data.sync.RemoveMediaPayload
 import dev.abhinav.artistpin.data.sync.RenameArtistPayload
 import dev.abhinav.artistpin.data.sync.SaveEventPayload
+import dev.abhinav.artistpin.data.sync.SetArtistProfilePayload
 import dev.abhinav.artistpin.data.sync.SyncOperation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 
@@ -98,7 +101,37 @@ class OfflineFirstConcertRepository(
      * repeat, and queueing them would fill the outbox with work that has no user-visible effect —
      * the sync's job is the user's own library, not a mirror of MusicBrainz.
      */
-    override suspend fun keepArtistArtworkFresh() = local.keepArtistArtworkFresh()
+    /**
+     * Runs the local lookup and sends what it finds to the shared catalog.
+     *
+     * Both halves run for as long as the caller keeps this alive. Queued rather than pushed
+     * directly because a lookup that happens on the underground still has to reach the server
+     * eventually, and because the next full pull rebuilds the artist table from the catalog — so
+     * artwork that never got there is artwork that gets erased.
+     */
+    override suspend fun keepArtistArtworkFresh(): Unit = coroutineScope {
+        launch {
+            local.resolvedProfiles.collect { resolved ->
+                enqueue(
+                    operation = SyncOperation.SET_ARTIST_PROFILE,
+                    entityId = resolved.artistId,
+                    payload = json.encodeToString(
+                        SetArtistProfilePayload.serializer(),
+                        SetArtistProfilePayload(
+                            artistName = resolved.artistName,
+                            imageUrl = resolved.imageUrl,
+                            genres = resolved.genres,
+                            spotifyUrl = resolved.spotifyUrl,
+                        ),
+                    ),
+                    // One artist, one answer: a second lookup for the same artist replaces the
+                    // first rather than queueing behind it.
+                    supersedePrevious = true,
+                )
+            }
+        }
+        local.keepArtistArtworkFresh()
+    }
 
     override suspend fun previewArtistDeletion(artistId: String): DataResult<ArtistDeletionImpact> =
         local.previewArtistDeletion(artistId)

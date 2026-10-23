@@ -30,6 +30,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -66,6 +69,20 @@ class RoomConcertRepository(
         concertDao.observeAllVenuePins().map { rows -> rows.map { it.toModel() } }
 
     /**
+     * Artwork this device has just resolved, announced as it is written.
+     *
+     * The lookup belongs here — it is the same work whether or not there is an account behind the
+     * app — but a build with a backend has somewhere else to put the answer: the shared catalog.
+     * Rather than teach this class about an outbox it otherwise knows nothing about, each result
+     * is published and OfflineFirstConcertRepository queues it.
+     *
+     * extraBufferCapacity, so emitting never suspends the lookup loop when nobody is collecting,
+     * which is every device-only build.
+     */
+    private val _resolvedProfiles = MutableSharedFlow<ResolvedArtistProfile>(extraBufferCapacity = 64)
+    val resolvedProfiles: SharedFlow<ResolvedArtistProfile> = _resolvedProfiles.asSharedFlow()
+
+    /**
      * Watches for artists with no artwork and fills them in as they appear. This has to be a
      * running collection rather than a one-shot call: the map is the app's start destination, so
      * a one-shot fires before the user has added anything and never sees artists saved later.
@@ -93,12 +110,23 @@ class RoomConcertRepository(
                 if (profile.isEmpty) Log.d(TAG, "Nothing found for '${artist.name}'")
                 // Written even when empty: the non-null genres column is what marks this artist
                 // as already looked up, so a genuine blank is never re-queried.
+                val genres = profile.genres.joinToString(GENRE_SEPARATOR)
                 runCatching {
                     artistDao.setProfile(
                         artistId = artist.id,
                         imageUrl = profile.imageUrl,
-                        genres = profile.genres.joinToString(GENRE_SEPARATOR),
+                        genres = genres,
                         spotifyUrl = profile.spotifyUrl,
+                    )
+                }.onSuccess {
+                    _resolvedProfiles.emit(
+                        ResolvedArtistProfile(
+                            artistId = artist.id,
+                            artistName = artist.name,
+                            imageUrl = profile.imageUrl,
+                            genres = genres,
+                            spotifyUrl = profile.spotifyUrl,
+                        ),
                     )
                 }.onFailure { Log.w(TAG, "Could not store profile for '${artist.name}'", it) }
             }

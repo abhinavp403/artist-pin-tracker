@@ -42,7 +42,7 @@ class FakeBackendApi : BackendApi {
     var saveCallCount = 0
     var renamedTo: Pair<String, String>? = null
     var deletedArtistId: String? = null
-    var profileWrites = mutableListOf<String>()
+    var profileWrites = mutableListOf<ProfileWrite>()
 
     private fun <T> read(value: T): T {
         failNextRead?.let { failNextRead = null; throw it }
@@ -165,8 +165,15 @@ class FakeBackendApi : BackendApi {
         genres: String,
         spotifyUrl: String?,
     ) {
-        profileWrites += artistId
+        profileWrites += ProfileWrite(artistId, imageUrl, genres, spotifyUrl)
     }
+
+    data class ProfileWrite(
+        val artistId: String,
+        val imageUrl: String?,
+        val genres: String,
+        val spotifyUrl: String?,
+    )
 
     companion object {
         fun offline() = IOException("no route to host")

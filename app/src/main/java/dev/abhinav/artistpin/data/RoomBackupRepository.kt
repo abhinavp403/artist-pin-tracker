@@ -101,6 +101,16 @@ class RoomBackupRepository(
         // counter exists to stop.
         val uploadAttemptsById = mediaDao.allMedia().associate { it.id to it.uploadAttempts }
 
+        // Artwork this device resolved that the payload may not know about yet.
+        //
+        // Keyed by name, not id: an artist added here has a local id until the first pull, after
+        // which the catalog's id replaces it, so matching on id would miss exactly the rows this
+        // protects. Derived data, not the user's — a payload that *has* a portrait still wins
+        // below, and this only fills what arrives blank.
+        val localArtwork = artistDao.allArtists()
+            .filter { it.imageUrl != null || it.genres != null }
+            .associateBy { it.name.normalizedArtistKey() }
+
         concertDao.deleteAllCities()
         artistDao.deleteAllArtists()
 
@@ -113,7 +123,19 @@ class RoomBackupRepository(
             },
         )
         artistDao.upsertArtists(
-            backup.artists.map { ArtistEntity(it.id, it.name, it.imageUrl, it.genres, it.spotifyUrl) },
+            backup.artists.map {
+                val known = localArtwork[it.name.normalizedArtistKey()]
+                ArtistEntity(
+                    id = it.id,
+                    name = it.name,
+                    imageUrl = it.imageUrl ?: known?.imageUrl,
+                    // Null genres means "never looked up", which is what puts an artist back in
+                    // the lookup queue. Carrying the local value over is what stops every pull
+                    // from re-running a lookup this device has already done.
+                    genres = it.genres ?: known?.genres,
+                    spotifyUrl = it.spotifyUrl ?: known?.spotifyUrl,
+                )
+            },
         )
         concertDao.insertEvents(
             backup.events.map {
