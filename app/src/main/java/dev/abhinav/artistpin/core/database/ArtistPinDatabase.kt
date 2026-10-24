@@ -28,7 +28,7 @@ class Converters {
         EventMediaEntity::class,
         SyncOutboxEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -40,6 +40,23 @@ abstract class ArtistPinDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "artistpin.db"
+
+        /**
+         * Marks which artists' artwork has reached the shared catalog.
+         *
+         * Defaults to 0 — "not pushed" — for every existing row, which is deliberately
+         * pessimistic: the column exists because profiles resolved on this device were never
+         * sent at all, so assuming the catalog already has them would preserve exactly the bug
+         * it is meant to close. A redundant push costs one no-op call, since
+         * catalog_set_artist_profile only fills blanks.
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE artists ADD COLUMN profilePushed INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
 
         /**
          * Drops `notes` and `rating` from events.

@@ -59,6 +59,7 @@ class LibrarySyncTest {
                 ioDispatcher = testDispatcher,
             ),
             mediaDao = database.mediaDao(),
+            artistDao = database.artistDao(),
             auth = FakeAuthRepository(),
             json = json,
             ioDispatcher = testDispatcher,

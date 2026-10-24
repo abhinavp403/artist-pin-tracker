@@ -163,6 +163,7 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
         const val TEST_DB_7 = "migration-test-7.db"
         const val TEST_DB_11 = "migration-test-11.db"
+        const val TEST_DB_12 = "migration-test-12.db"
         const val TEST_DB_6 = "migration-test-6.db"
         const val TEST_DB_5 = "migration-test-5.db"
         const val TEST_DB_4 = "migration-test-4.db"
@@ -246,6 +247,34 @@ class MigrationTest {
         db.query("SELECT * FROM events").use { cursor ->
             assertEquals(-1, cursor.getColumnIndex("notes"))
             assertEquals(-1, cursor.getColumnIndex("rating"))
+        }
+        db.close()
+    }
+
+    @Test
+    fun `migrating to version 12 marks every existing artist as not yet pushed`() {
+        helper.createDatabase(TEST_DB_12, 11).apply {
+            execSQL(
+                "INSERT INTO artists (id, name, imageUrl, genres, spotifyUrl) " +
+                    "VALUES ('a1', 'Bedouin', 'https://img.example/b.jpg', 'melodic house', NULL)",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB_12,
+            12,
+            true,
+            ArtistPinDatabase.MIGRATION_11_12,
+        )
+
+        db.query("SELECT imageUrl, profilePushed FROM artists").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("https://img.example/b.jpg", cursor.getString(0))
+            // Pessimistic on purpose: these are exactly the artists whose artwork was resolved
+            // locally and never sent, so assuming the catalog has it would preserve the bug the
+            // column exists to close. A redundant push only fills blanks.
+            assertEquals(0, cursor.getInt(1))
         }
         db.close()
     }

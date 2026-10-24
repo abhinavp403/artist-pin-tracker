@@ -3,6 +3,7 @@ package dev.abhinav.artistpin.data.sync
 import android.util.Log
 import dev.abhinav.artistpin.core.auth.AuthRepository
 import dev.abhinav.artistpin.core.auth.AuthState
+import dev.abhinav.artistpin.core.database.ArtistDao
 import dev.abhinav.artistpin.core.database.MediaDao
 import dev.abhinav.artistpin.core.database.SyncOutboxDao
 import dev.abhinav.artistpin.core.database.SyncOutboxEntity
@@ -58,6 +59,7 @@ class LibrarySync(
     private val api: BackendApi,
     private val localBackup: RoomBackupRepository,
     private val mediaDao: MediaDao,
+    private val artistDao: ArtistDao,
     private val auth: AuthRepository,
     private val json: Json,
     private val ioDispatcher: CoroutineDispatcher,
@@ -85,6 +87,7 @@ class LibrarySync(
 
         try {
             queuePendingUploads()
+            queuePendingProfiles()
             val (pushed, dropped) = drain()
             val remaining = outbox.pendingCount()
 
@@ -272,6 +275,9 @@ class LibrarySync(
                     genres = p.genres,
                     spotifyUrl = p.spotifyUrl,
                 )
+                // Only after the call returns. Marked any earlier and a failed send would look
+                // like a delivered one, which is the whole failure this column exists to catch.
+                artistDao.markProfilePushed(entry.entityId)
             }
 
             SyncOperation.DELETE_STORED_MEDIA -> {
@@ -374,6 +380,39 @@ class LibrarySync(
     }
 
     /**
+     * Queues artwork this device resolved that the catalog has not been told about.
+     *
+     * The sibling of [queuePendingUploads], and for the same reason: a push that happens only as
+     * a side effect of the lookup is a push that is lost whenever the lookup's scope dies between
+     * the local write and the send. Expressed as a question about stored state — "whose profile
+     * has not been pushed" — it covers that case, the artists resolved before this column
+     * existed, and a send that failed last week, instead of three mechanisms.
+     */
+    private suspend fun queuePendingProfiles() {
+        val pending = artistDao.awaitingProfilePush(PROFILE_BATCH)
+        for (artist in pending) {
+            if (outbox.countFor(artist.id, SyncOperation.SET_ARTIST_PROFILE.name) > 0) continue
+            outbox.enqueue(
+                SyncOutboxEntity(
+                    operation = SyncOperation.SET_ARTIST_PROFILE.name,
+                    entityId = artist.id,
+                    payloadJson = json.encodeToString(
+                        SetArtistProfilePayload.serializer(),
+                        SetArtistProfilePayload(
+                            artistName = artist.name,
+                            imageUrl = artist.imageUrl,
+                            genres = artist.genres.orEmpty(),
+                            spotifyUrl = artist.spotifyUrl,
+                        ),
+                    ),
+                    queuedAtEpochMillis = System.currentTimeMillis(),
+                ),
+            )
+        }
+        if (pending.isNotEmpty()) Log.d(TAG, "Queued ${pending.size} artist profile(s)")
+    }
+
+    /**
      * Replaces the local library with the server's.
      *
      * Safe only because the outbox is empty by the time this runs, so there is nothing local that
@@ -399,6 +438,9 @@ class LibrarySync(
          * more failed requests.
          */
         const val MAX_ATTEMPTS = 5
+
+        /** Enough to clear a typical library in a few runs without flooding one. */
+        const val PROFILE_BATCH = 25
 
         /**
          * Photos queued per sync run. A library migrated from years of shows can hold hundreds, and

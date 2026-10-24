@@ -70,6 +70,7 @@ class SyncSessionTest {
                 ioDispatcher = testDispatcher,
             ),
             mediaDao = database.mediaDao(),
+            artistDao = database.artistDao(),
             auth = auth,
             json = json,
             ioDispatcher = testDispatcher,

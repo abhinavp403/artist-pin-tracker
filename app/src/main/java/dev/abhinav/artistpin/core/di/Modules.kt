@@ -93,7 +93,8 @@ val databaseModule = module {
             ArtistPinDatabase.MIGRATION_7_8,
             ArtistPinDatabase.MIGRATION_8_9,
             ArtistPinDatabase.MIGRATION_9_10,
-            ArtistPinDatabase.MIGRATION_10_11).build()
+            ArtistPinDatabase.MIGRATION_10_11,
+            ArtistPinDatabase.MIGRATION_11_12).build()
     }
     single { get<ArtistPinDatabase>().concertDao() }
     single { get<ArtistPinDatabase>().artistDao() }
@@ -203,7 +204,7 @@ val dataModule = module {
             get<RoomConcertRepository>()
         }
     }
-    single { LibrarySync(get(), get(), get(), get(), get(), json, get(IoDispatcher), get()) }
+    single { LibrarySync(get(), get(), get(), get(), get(), get(), json, get(IoDispatcher), get()) }
     single<VenueSearchService> {
         val context = androidContext()
         // Resolved lazily per call: Places is only initialized when a key is configured, and

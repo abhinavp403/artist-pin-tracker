@@ -13,8 +13,6 @@ import dev.abhinav.artistpin.core.model.BackupData
 import dev.abhinav.artistpin.core.model.DataResult
 import dev.abhinav.artistpin.data.sync.LibrarySync
 import dev.abhinav.artistpin.data.sync.SyncScheduler
-import dev.abhinav.artistpin.data.sync.SetArtistProfilePayload
-import dev.abhinav.artistpin.data.sync.SyncOperation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.launch
@@ -23,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -136,7 +135,7 @@ class ArtistArtworkSyncTest {
     }
 
     @Test
-    fun `a resolved lookup is queued for the catalog`() = runTest(testDispatcher) {
+    fun `a resolved lookup reaches the catalog on the next sync`() = runTest(testDispatcher) {
         val repository = offlineFirstWith(
             FakeArtistImageSource(
                 mapOf(
@@ -149,56 +148,120 @@ class ArtistArtworkSyncTest {
             ),
         )
         repository.saveEvent(draft())
+        resolveArtwork(repository)
 
-        val job = CoroutineScope(testDispatcher).launch {
-            repository.keepArtistArtworkFresh()
+        val api = FakeBackendApi()
+        // One run queues the profile and drains it, so the whole result is what the server got.
+        syncWith(api)
+
+        val write = api.profileWrites.single()
+        assertEquals("https://img.example/bedouin.jpg", write.imageUrl)
+        assertEquals("melodic house", write.genres)
+        assertEquals("https://open.spotify.com/artist/bedouin", write.spotifyUrl)
+    }
+
+    @Test
+    fun `artwork resolved while nothing was listening is still sent`() = runTest(testDispatcher) {
+        val repository = offlineFirstWith(
+            FakeArtistImageSource(
+                mapOf("Bedouin" to ArtistProfile(imageUrl = "https://img.example/bedouin.jpg")),
+            ),
+        )
+        repository.saveEvent(draft())
+        // The lookup runs with no collector at all — the shape of leaving the map screen between
+        // the local write and the emit. Queueing from that emission would lose this artist for
+        // good: its genres are now non-null, which is exactly what keeps it out of the lookup
+        // query from here on.
+        RoomConcertRepository(
+            concertDao = database.concertDao(),
+            artistDao = database.artistDao(),
+            mediaDao = database.mediaDao(),
+            mediaImporter = MediaImporter(ApplicationProvider.getApplicationContext(), testDispatcher),
+            artistImageSource = FakeArtistImageSource(
+                mapOf("Bedouin" to ArtistProfile(imageUrl = "https://img.example/bedouin.jpg")),
+            ),
+            ioDispatcher = testDispatcher,
+        ).let { lone ->
+            val job = CoroutineScope(testDispatcher).launch { lone.keepArtistArtworkFresh() }
+            testScheduler.advanceUntilIdle()
+            job.cancel()
         }
-        testScheduler.advanceUntilIdle()
-        job.cancel()
 
-        val queued = database.syncOutboxDao().pending()
-            .single { it.operation == SyncOperation.SET_ARTIST_PROFILE.name }
-        val payload = json.decodeFromString(SetArtistProfilePayload.serializer(), queued.payloadJson)
-        assertEquals("Bedouin", payload.artistName)
-        assertEquals("https://img.example/bedouin.jpg", payload.imageUrl)
-        assertEquals("melodic house", payload.genres)
+        val api = FakeBackendApi()
+        syncWith(api)
+
+        assertEquals("catalog-id-for-bedouin", api.profileWrites.single().artistId)
     }
 
     @Test
     fun `draining that entry sends the artwork to the catalog under the name's id`() =
         runTest(testDispatcher) {
             val api = FakeBackendApi()
-            val auth = FakeAuthRepository().apply { setState(AuthState.SignedIn("user-1", null)) }
             val repository = offlineFirstWith(
                 FakeArtistImageSource(
                     mapOf("Bedouin" to ArtistProfile(imageUrl = "https://img.example/bedouin.jpg")),
                 ),
             )
             repository.saveEvent(draft())
-            val job = CoroutineScope(testDispatcher).launch {
-                repository.keepArtistArtworkFresh()
-            }
-            testScheduler.advanceUntilIdle()
-            job.cancel()
+            resolveArtwork(repository)
 
-            val sync = LibrarySync(
-                outbox = database.syncOutboxDao(),
-                api = api,
-                localBackup = backup,
-                mediaDao = database.mediaDao(),
-                auth = auth,
-                json = json,
-                ioDispatcher = testDispatcher,
-                scheduler = object : SyncScheduler { override fun requestSync() = Unit },
-            )
-            sync.syncNow()
+            syncWith(api)
 
             val write = api.profileWrites.single()
             // Resolved by name, because the local id means nothing to the catalog.
             assertEquals("catalog-id-for-bedouin", write.artistId)
             assertEquals("https://img.example/bedouin.jpg", write.imageUrl)
             assertTrue(api.findOrCreateCalls.contains("Bedouin"))
+
+            // Marked once the call returned, so a second run has nothing left to say.
+            syncWith(api)
+            assertEquals(1, api.profileWrites.size)
         }
+
+    @Test
+    fun `a send that failed is tried again on the next sync`() = runTest(testDispatcher) {
+        val repository = offlineFirstWith(
+            FakeArtistImageSource(
+                mapOf("Bedouin" to ArtistProfile(imageUrl = "https://img.example/bedouin.jpg")),
+            ),
+        )
+        repository.saveEvent(draft())
+        resolveArtwork(repository)
+
+        val api = FakeBackendApi()
+        api.failNextRead = FakeBackendApi.offline()
+        syncWith(api)
+        assertTrue("nothing should have reached the catalog", api.profileWrites.isEmpty())
+        assertFalse(database.artistDao().allArtists().single().profilePushed)
+
+        syncWith(api)
+
+        assertEquals("catalog-id-for-bedouin", api.profileWrites.single().artistId)
+    }
+
+    /** Runs the lookup loop to completion, as the map screen does while it is on screen. */
+    private fun kotlinx.coroutines.test.TestScope.resolveArtwork(
+        repository: OfflineFirstConcertRepository,
+    ) {
+        val job = CoroutineScope(testDispatcher).launch { repository.keepArtistArtworkFresh() }
+        testScheduler.advanceUntilIdle()
+        job.cancel()
+    }
+
+    private suspend fun syncWith(api: FakeBackendApi) {
+        LibrarySync(
+            outbox = database.syncOutboxDao(),
+            api = api,
+            localBackup = backup,
+            mediaDao = database.mediaDao(),
+            artistDao = database.artistDao(),
+            auth = FakeAuthRepository().apply { setState(AuthState.SignedIn("user-1", null)) },
+            json = json,
+            ioDispatcher = testDispatcher,
+            scheduler = object : SyncScheduler { override fun requestSync() = Unit },
+        ).syncNow()
+    }
+
 
     private fun offlineFirstWith(images: ArtistImageSource): OfflineFirstConcertRepository {
         val context = ApplicationProvider.getApplicationContext<Context>()

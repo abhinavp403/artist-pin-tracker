@@ -134,6 +134,10 @@ class RoomBackupRepository(
                     // from re-running a lookup this device has already done.
                     genres = it.genres ?: known?.genres,
                     spotifyUrl = it.spotifyUrl ?: known?.spotifyUrl,
+                    // A profile that arrived in the payload came *from* the catalog, so it is
+                    // there by definition. One kept from the local row is the opposite: the
+                    // payload not carrying it is the evidence the catalog never got it.
+                    profilePushed = it.genres != null || it.imageUrl != null,
                 )
             },
         )

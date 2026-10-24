@@ -55,6 +55,15 @@ data class ArtistEntity(
      */
     val genres: String? = null,
     val spotifyUrl: String? = null,
+    /**
+     * Whether this artist's profile has reached the shared catalog.
+     *
+     * The push cannot be a fire-and-forget side effect of the lookup: a profile written locally
+     * and then never sent leaves the catalog blank forever, because a non-null [genres] is
+     * exactly what keeps this artist out of the lookup query. This column is what lets the sync
+     * find such an artist again on any later run.
+     */
+    val profilePushed: Boolean = false,
 )
 
 @Entity(

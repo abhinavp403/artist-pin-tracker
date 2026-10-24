@@ -67,6 +67,7 @@ class MediaUploadTest {
                 ioDispatcher = testDispatcher,
             ),
             mediaDao = database.mediaDao(),
+            artistDao = database.artistDao(),
             auth = FakeAuthRepository(userId = "user-1"),
             json = json,
             ioDispatcher = testDispatcher,

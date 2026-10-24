@@ -27,7 +27,6 @@ import dev.abhinav.artistpin.data.sync.SyncScheduler
 import dev.abhinav.artistpin.data.sync.RemoveMediaPayload
 import dev.abhinav.artistpin.data.sync.RenameArtistPayload
 import dev.abhinav.artistpin.data.sync.SaveEventPayload
-import dev.abhinav.artistpin.data.sync.SetArtistProfilePayload
 import dev.abhinav.artistpin.data.sync.SyncOperation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -97,33 +96,19 @@ class OfflineFirstConcertRepository(
     override fun observeEvent(eventId: String): Flow<ConcertEvent?> = local.observeEvent(eventId)
 
     /**
-     * Runs the local lookup and sends what it finds to the shared catalog.
+     * Runs the local lookup and asks for a sync when it finds something.
      *
-     * Both halves run for as long as the caller keeps this alive. Queued rather than pushed
-     * directly because a lookup that happens on the underground still has to reach the server
-     * eventually, and because the next full pull rebuilds the artist table from the catalog — so
-     * artwork that never got there is artwork that gets erased.
+     * The ask is a nudge, not the delivery. What actually sends artwork to the catalog is
+     * LibrarySync.queuePendingProfiles, which reads the profilePushed column — so a nudge that
+     * arrives before anyone is listening, or never arrives because this scope was cancelled
+     * between the local write and the emit, costs latency and nothing else. Queueing from here
+     * instead would make the push depend on a hot flow and a live collector, and an artist whose
+     * emission was missed would never be retried: a non-null genres column is exactly what keeps
+     * it out of the lookup query from then on.
      */
     override suspend fun keepArtistArtworkFresh(): Unit = coroutineScope {
         launch {
-            local.resolvedProfiles.collect { resolved ->
-                enqueue(
-                    operation = SyncOperation.SET_ARTIST_PROFILE,
-                    entityId = resolved.artistId,
-                    payload = json.encodeToString(
-                        SetArtistProfilePayload.serializer(),
-                        SetArtistProfilePayload(
-                            artistName = resolved.artistName,
-                            imageUrl = resolved.imageUrl,
-                            genres = resolved.genres,
-                            spotifyUrl = resolved.spotifyUrl,
-                        ),
-                    ),
-                    // One artist, one answer: a second lookup for the same artist replaces the
-                    // first rather than queueing behind it.
-                    supersedePrevious = true,
-                )
-            }
+            local.resolvedProfiles.collect { scheduler.requestSync() }
         }
         local.keepArtistArtworkFresh()
     }

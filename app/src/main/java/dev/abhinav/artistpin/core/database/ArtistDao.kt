@@ -12,6 +12,8 @@ interface ArtistDao {
         """
         SELECT a.id AS id, a.name AS name, a.imageUrl AS imageUrl,
                a.genres AS genres, a.spotifyUrl AS spotifyUrl,
+               -- Unused by the summary itself; ArtistSummaryRow embeds the whole entity.
+               a.profilePushed AS profilePushed,
                COUNT(DISTINCT e.id) AS timesSeen,
                (SELECT GROUP_CONCAT(DISTINCT c2.name)
                   FROM event_artists ea2
@@ -51,11 +53,26 @@ interface ArtistDao {
         UPDATE artists
            SET imageUrl = COALESCE(:imageUrl, imageUrl),
                genres = :genres,
-               spotifyUrl = COALESCE(:spotifyUrl, spotifyUrl)
+               spotifyUrl = COALESCE(:spotifyUrl, spotifyUrl),
+               -- A freshly resolved profile is one the catalog has not seen.
+               profilePushed = 0
          WHERE id = :artistId
         """,
     )
     suspend fun setProfile(artistId: String, imageUrl: String?, genres: String, spotifyUrl: String?)
+
+    /**
+     * Artists whose profile this device knows and the catalog may not.
+     *
+     * Limited, because the first run after this column arrives finds every artist in the library
+     * at once; a redundant push is harmless — `catalog_set_artist_profile` only fills blanks —
+     * but a thousand of them in one outbox is not.
+     */
+    @Query("SELECT * FROM artists WHERE genres IS NOT NULL AND profilePushed = 0 LIMIT :limit")
+    suspend fun awaitingProfilePush(limit: Int): List<ArtistEntity>
+
+    @Query("UPDATE artists SET profilePushed = 1 WHERE id = :artistId")
+    suspend fun markProfilePushed(artistId: String)
 
     @Query("SELECT * FROM artists")
     suspend fun allArtists(): List<ArtistEntity>

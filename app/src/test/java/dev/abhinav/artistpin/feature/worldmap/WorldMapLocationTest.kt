@@ -99,6 +99,7 @@ class WorldMapLocationTest {
                 api = FakeBackendApi(),
                 localBackup = backups,
                 mediaDao = database.mediaDao(),
+                artistDao = database.artistDao(),
                 auth = FakeAuthRepository(),
                 json = Json,
                 ioDispatcher = testDispatcher,
