@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -434,7 +435,9 @@ private fun TopChrome(
             .padding(start = 12.dp, end = 12.dp, top = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (showCounts) StatPill(cityCount = cityCount, showCount = showCount)
+        if (showCounts) {
+            StatPill(cityCount = cityCount, showCount = showCount, onClick = onOpenStats)
+        }
         Spacer(Modifier.weight(1f))
         Box {
             Box(
@@ -471,7 +474,7 @@ private fun TopChrome(
                     leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
                 )
                 DropdownMenuItem(
-                    text = { Text("Your shows, counted") },
+                    text = { Text("Your Stats") },
                     onClick = onOpenStats,
                     leadingIcon = { Icon(Icons.Default.BarChart, contentDescription = null) },
                 )
@@ -554,12 +557,15 @@ private fun ZoomButton(icon: ImageVector, description: String, onClick: () -> Un
 }
 
 @Composable
-private fun StatPill(cityCount: Int, showCount: Int) {
+private fun StatPill(cityCount: Int, showCount: Int, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .clip(CircleShape)
             .background(Pin.Chrome)
-            .padding(start = 10.dp, end = 13.dp, top = 7.dp, bottom = 7.dp),
+            .clickable(onClick = onClick)
+            // Trimmed on the end so the chevron sits where the padding used to be, keeping the
+            // pill the same size as before it became a button.
+            .padding(start = 10.dp, end = 6.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -581,6 +587,13 @@ private fun StatPill(cityCount: Int, showCount: Int) {
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             color = Pin.OnChromeSecondary,
+        )
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            // The row already reads "10 cities, 53 shows"; the chevron only says it opens.
+            contentDescription = "Your Stats",
+            tint = Pin.OnChromeTertiary,
+            modifier = Modifier.size(18.dp),
         )
     }
 }
