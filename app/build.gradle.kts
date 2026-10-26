@@ -95,7 +95,20 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Emulator convenience: skip the sign-in gate and seed the library from
+            // src/debug/assets/dev-library.json. Declared per build type rather than in
+            // defaultConfig so local.properties cannot switch it on in a shippable build —
+            // the release value below is a literal.
+            buildConfigField(
+                "boolean",
+                "DEV_SKIP_AUTH",
+                localProperty("DEV_SKIP_AUTH").ifBlank { "false" },
+            )
+        }
         release {
+            buildConfigField("boolean", "DEV_SKIP_AUTH", "false")
+
             // Null when no keystore is configured, which leaves the APK unsigned rather than
             // silently falling back to the debug key. A debug-signed "release" installs happily
             // and then can never be upgraded by a properly signed one — the signatures differ,

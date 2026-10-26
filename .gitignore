@@ -27,3 +27,6 @@ supabase/.env*
 
 # Android Studio's Generate Signed Bundle wizard writes here, outside build/.
 /app/release/
+
+# Emulator seed data — a real exported library, not something to commit.
+app/src/debug/assets/dev-library.json

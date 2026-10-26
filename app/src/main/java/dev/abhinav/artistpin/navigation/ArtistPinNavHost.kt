@@ -60,6 +60,12 @@ fun ArtistPinRoot() {
         return
     }
 
+    // Debug-only, and false in any release build regardless of local.properties.
+    if (BuildConfig.DEV_SKIP_AUTH) {
+        DevPreviewApp()
+        return
+    }
+
     val auth: AuthRepository = koinInject()
     val state by auth.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
