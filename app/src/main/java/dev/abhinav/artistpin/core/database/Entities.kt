@@ -228,8 +228,10 @@ data class VenuePinRow(
 data class EventStatsRow(
     val dateEpochDay: Long,
     val cityId: String,
+    val cityName: String,
     val country: String,
     val venueId: String,
+    val venueName: String,
 )
 
 data class EventSummaryRow(

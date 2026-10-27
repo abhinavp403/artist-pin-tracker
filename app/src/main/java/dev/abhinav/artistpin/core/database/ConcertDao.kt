@@ -233,8 +233,10 @@ interface ConcertDao {
         """
         SELECT e.dateEpochDay AS dateEpochDay,
                c.id AS cityId,
+               c.name AS cityName,
                c.country AS country,
-               v.id AS venueId
+               v.id AS venueId,
+               v.name AS venueName
           FROM events e
           JOIN venues v ON v.id = e.venueId
           JOIN cities c ON c.id = v.cityId

@@ -83,6 +83,43 @@ object Pin {
     val Destructive: Color @Composable @ReadOnlyComposable get() = pick(Color(0xFFF08B7A), Color(0xFFB3261E))
     val DestructiveBorder: Color @Composable @ReadOnlyComposable get() = pick(Color(0x4DF08B7A), Color(0x59B3261E))
 
+    // ---- Stats screen -------------------------------------------------------------------
+    //
+    // Its own palette, from the stats handoff. The blue here is brighter than [Accent] on
+    // purpose: these are chart fills read at tile size, not map pins, and the map's navy
+    // disappears at 14x8dp. The kraft matches the ticket stub on the show screen, darkened in
+    // light mode because the paper tone has no contrast on white.
+
+    val StatsAccent = Color(0xFF2B7FD4)
+    val StatsAccentLight: Color @Composable @ReadOnlyComposable get() = pick(Color(0xFF9FC4F0), Color(0xFF1F5FAA))
+    val StatsChip: Color @Composable @ReadOnlyComposable get() = pick(Color(0x2E2B7FD4), Color(0x1F2B7FD4))
+    val Kraft: Color @Composable @ReadOnlyComposable get() = pick(Color(0xFFCBC0A9), Color(0xFF8A7350))
+
+    /** Non-peak year tiles. Darker in light mode, where a 55% blue on white goes pale. */
+    val StatsTileIdle: Color @Composable @ReadOnlyComposable get() = pick(Color(0x8C2B7FD4), Color(0x732B7FD4))
+
+    /** The hero card is the same gradient in both themes, and always carries white text. */
+    val HeroGradient = listOf(Color(0xFF173F6B), Color(0xFF122A45), Color(0xFF0F1A28))
+    val OnHero = Color(0xFFFFFFFF)
+    val OnHeroSecondary = Color(0xBFFFFFFF)
+    val OnHeroLabel = Color(0x8CFFFFFF)
+    val HeroRule = Color(0x2E9FC4F0)
+    val HeroEyebrow = Color(0xCC9FC4F0)
+    val HeroCircle = Color(0x249FC4F0)
+    val HeroCircleFaint = Color(0x1A9FC4F0)
+
+    /** Treemap shades, darkening by rank. Fixed in both themes — the text on them is white. */
+    val TreemapShades = listOf(
+        Color(0xFF2B7FD4),
+        Color(0xFF22649F),
+        Color(0xFF1D5384),
+        Color(0xFF18466F),
+        Color(0xFF153C5F),
+        Color(0xFF123350),
+    )
+    val OnTreemap = Color(0xFFFFFFFF)
+    val OnTreemapSecondary = Color(0xBFFFFFFF)
+
     // ---- Radii --------------------------------------------------------------------------
 
     val RadiusChip = 8.dp
@@ -92,6 +129,8 @@ object Pin {
     val RadiusCard = 16.dp
     val RadiusStub = 20.dp
     val RadiusDock = 26.dp
+    val RadiusStatsCard = 22.dp
+    val RadiusHero = 24.dp
 }
 
 @Composable
