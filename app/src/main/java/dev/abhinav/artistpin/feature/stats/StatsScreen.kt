@@ -79,6 +79,8 @@ private const val TileWidth = 14
 @Composable
 fun StatsScreen(
     onBack: () -> Unit,
+    onOpenVenue: (String) -> Unit,
+    onOpenCountry: (String) -> Unit,
     viewModel: StatsViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -106,13 +108,17 @@ fun StatsScreen(
                 )
             }
 
-            else -> StatsList(uiState.stats)
+            else -> StatsList(uiState.stats, onOpenVenue, onOpenCountry)
         }
     }
 }
 
 @Composable
-private fun StatsList(stats: LibraryStats) {
+private fun StatsList(
+    stats: LibraryStats,
+    onOpenVenue: (String) -> Unit,
+    onOpenCountry: (String) -> Unit,
+) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -129,11 +135,11 @@ private fun StatsList(stats: LibraryStats) {
 
         if (stats.venues.isNotEmpty()) {
             item { SectionLabel("Venue loyalty") }
-            item { VenueLoyaltyCard(stats) }
+            item { VenueLoyaltyCard(stats, onOpenVenue) }
         }
 
         item { SectionLabel("Passport") }
-        item { PassportCard(stats) }
+        item { PassportCard(stats, onOpenCountry) }
     }
 }
 
@@ -621,7 +627,7 @@ private fun BusiestMonthCard(stats: LibraryStats) {
 }
 
 @Composable
-private fun VenueLoyaltyCard(stats: LibraryStats) {
+private fun VenueLoyaltyCard(stats: LibraryStats, onOpenVenue: (String) -> Unit) {
     StatsCard(PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 16.dp)) {
         Column(Modifier.padding(start = 2.dp, end = 2.dp, bottom = 16.dp)) {
             Text(
@@ -661,7 +667,7 @@ private fun VenueLoyaltyCard(stats: LibraryStats) {
                             ),
                         ),
                 ) {
-                    RepeatVenueTreemap(stats)
+                    RepeatVenueTreemap(stats, onOpenVenue)
                 }
             }
             if (singleShows > 0) {
@@ -701,7 +707,7 @@ private fun VenueLoyaltyCard(stats: LibraryStats) {
 private const val TreemapBoxes = 5
 
 @Composable
-private fun RepeatVenueTreemap(stats: LibraryStats) {
+private fun RepeatVenueTreemap(stats: LibraryStats, onOpenVenue: (String) -> Unit) {
     // Already ordered by shows, then by name, so a tie is broken alphabetically rather than by
     // whichever row the database happened to return first.
     val drawn = stats.repeatVenues.take(TreemapBoxes)
@@ -726,7 +732,8 @@ private fun RepeatVenueTreemap(stats: LibraryStats) {
                             height = (rect.height - gap.toPx()).coerceAtLeast(0f).toDp(),
                         )
                         .clip(RoundedCornerShape(5.dp))
-                        .background(Pin.TreemapShades[index.coerceAtMost(Pin.TreemapShades.lastIndex)]),
+                        .background(Pin.TreemapShades[index.coerceAtMost(Pin.TreemapShades.lastIndex)])
+                        .clickable { onOpenVenue(venue.venueId) },
                 ) {
                     TreemapLabel(
                         name = venue.name,
@@ -939,7 +946,7 @@ private fun OneNightStands(
 }
 
 @Composable
-private fun PassportCard(stats: LibraryStats) {
+private fun PassportCard(stats: LibraryStats, onOpenCountry: (String) -> Unit) {
     StatsCard(PaddingValues(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 18.dp)) {
         androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
@@ -963,7 +970,8 @@ private fun PassportCard(stats: LibraryStats) {
                             } else {
                                 Modifier.weight(if (index == 0) 1.35f else 1f)
                             },
-                        ),
+                        )
+                        .clickable { onOpenCountry(country.country) },
                 )
             }
         }

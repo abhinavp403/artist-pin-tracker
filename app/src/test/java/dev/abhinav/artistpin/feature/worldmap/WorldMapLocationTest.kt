@@ -18,6 +18,7 @@ import dev.abhinav.artistpin.data.LibraryMigrator
 import dev.abhinav.artistpin.data.sync.LibrarySync
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -225,4 +226,69 @@ class WorldMapLocationTest {
 
         assertEquals(1, provider.calls)
     }
+
+    /**
+     * The stats screen's treemap hands a venue id to a map that has only just been created.
+     *
+     * The pins are a query away on a cold start, so a handoff that read the current value would
+     * find an empty list and do nothing — and would appear to work in every test that had already
+     * let the map settle.
+     */
+    @Test
+    fun `focusing a venue opens it even when the pins have not loaded yet`() =
+        runTest(testDispatcher) {
+            repository.saveEvent(
+                EventDraft(
+                    date = LocalDate.of(2025, 3, 1),
+                    cityName = "Berlin",
+                    country = "Germany",
+                    venueName = "Berghain",
+                    latitude = 52.5111,
+                    longitude = 13.4432,
+                    artistNames = listOf("Fred again.."),
+                ),
+            )
+            advanceUntilIdle()
+            val venueId = database.concertDao().observeAllVenuePins().first().single().venue.id
+
+            // Asked before anything has been collected, which is the real sequence: the screen is
+            // constructed and the request arrives in the same frame.
+            val viewModel = viewModel(FakeLocationProvider(null))
+            viewModel.focusVenue(venueId)
+            advanceUntilIdle()
+
+            assertEquals(venueId, viewModel.uiState.value.expandedVenueId)
+            assertEquals("Berlin", viewModel.uiState.value.selectedPin?.city?.name)
+            assertTrue(viewModel.uiState.value.venueEvents.isNotEmpty())
+        }
+
+    /**
+     * A treemap box can outlive the venue it points at — deleted on another device, removed by
+     * the next pull. Waiting for a venue that will never arrive leaves the tap doing nothing at
+     * all, with the coroutine parked until the screen goes away.
+     */
+    @Test
+    fun `focusing a venue that no longer exists says so instead of waiting`() =
+        runTest(testDispatcher) {
+            repository.saveEvent(
+                EventDraft(
+                    date = LocalDate.of(2025, 3, 1),
+                    cityName = "Berlin",
+                    country = "Germany",
+                    venueName = "Berghain",
+                    latitude = 52.5111,
+                    longitude = 13.4432,
+                    artistNames = listOf("Fred again.."),
+                ),
+            )
+            advanceUntilIdle()
+            val viewModel = viewModel(FakeLocationProvider(null))
+
+            viewModel.focusVenue("a-venue-that-was-deleted")
+            advanceUntilIdle()
+
+            assertNull(viewModel.uiState.value.expandedVenueId)
+            val effect = viewModel.effects.first()
+            assertTrue(effect is WorldMapEffect.ShowMessage)
+        }
 }

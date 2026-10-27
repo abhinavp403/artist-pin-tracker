@@ -159,6 +159,10 @@ fun HomeScreen(
     onAddEvent: () -> Unit,
     onOpenStats: () -> Unit,
     onSignOut: () -> Unit,
+    /** Arrive with this venue's shows already unfolded in the dock. */
+    focusVenueId: String? = null,
+    /** Arrive with the camera framing the cities in this country. */
+    focusCountry: String? = null,
     mapViewModel: WorldMapViewModel = koinViewModel(),
     artistsViewModel: ArtistsViewModel = koinViewModel(),
 ) {
@@ -169,6 +173,18 @@ fun HomeScreen(
     var tab by state::tab
     var sheetExpanded by state::venuesExpanded
     val cameraPositionState = state.camera.position
+
+    // Keyed by the request, so returning to the map later does not re-open what you closed.
+    LaunchedEffect(focusVenueId) {
+        if (focusVenueId != null) {
+            tab = HomeTab.MAP
+            sheetExpanded = true
+            mapViewModel.focusVenue(focusVenueId)
+        }
+    }
+    LaunchedEffect(focusCountry) {
+        if (focusCountry != null) tab = HomeTab.MAP
+    }
 
     val createBackup = rememberLauncherForActivityResult(CreateDocument(BACKUP_MIME_TYPE)) { uri ->
         uri?.let(mapViewModel::onBackupDestinationPicked)
@@ -298,6 +314,7 @@ fun HomeScreen(
                     startLocation = uiState.startLocation,
                     isLocatingUser = uiState.isLocatingUser,
                     cameraState = state.camera,
+                    fitCountry = focusCountry,
                     onCitySelected = mapViewModel::onCitySelected,
                     // Tapping a venue pin unfolds that venue's shows in the dock, which is the
                     // only place on this screen that can hold them.

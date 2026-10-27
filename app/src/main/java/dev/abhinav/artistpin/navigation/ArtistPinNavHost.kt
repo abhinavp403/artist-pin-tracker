@@ -14,6 +14,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import dev.abhinav.artistpin.BuildConfig
 import dev.abhinav.artistpin.core.auth.AuthRepository
 import dev.abhinav.artistpin.core.auth.AuthState
@@ -119,12 +120,15 @@ fun ArtistPinApp(
 
     NavHost(
         navController = navController,
-        startDestination = HomeRoute,
+        startDestination = HomeRoute(),
         modifier = Modifier.fillMaxSize(),
     ) {
-        composable<HomeRoute> {
+        composable<HomeRoute> { entry ->
+            val route: HomeRoute = entry.toRoute()
             HomeScreen(
                 state = homeState,
+                focusVenueId = route.focusVenueId,
+                focusCountry = route.focusCountry,
                 onOpenArtist = { navController.navigate(ArtistDetailRoute(it)) },
                 onOpenEvent = { navController.navigate(EventDetailRoute(it)) },
                 onAddEvent = { navController.navigate(EventEditRoute()) },
@@ -134,7 +138,22 @@ fun ArtistPinApp(
         }
 
         composable<StatsRoute> {
-            StatsScreen(onBack = navController::popBackStack)
+            StatsScreen(
+                onBack = navController::popBackStack,
+                // Replaces the existing home entry rather than stacking a second one, so the
+                // back gesture still leaves the app from the map instead of walking a trail of
+                // focus requests backwards.
+                onOpenVenue = { venueId ->
+                    navController.navigate(HomeRoute(focusVenueId = venueId)) {
+                        popUpTo<HomeRoute> { inclusive = true }
+                    }
+                },
+                onOpenCountry = { country ->
+                    navController.navigate(HomeRoute(focusCountry = country)) {
+                        popUpTo<HomeRoute> { inclusive = true }
+                    }
+                },
+            )
         }
 
         composable<EventDetailRoute> {

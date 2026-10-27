@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -99,6 +101,8 @@ fun WorldMapCanvas(
     startLocation: Coordinates?,
     isLocatingUser: Boolean,
     cameraState: WorldMapCameraState,
+    /** A country to frame on arrival, from a passport stamp on the stats screen. */
+    fitCountry: String? = null,
     onCitySelected: (String) -> Unit,
     onVenueSelected: (venueId: String, cityId: String) -> Unit,
     onMapClick: () -> Unit,
@@ -114,6 +118,30 @@ fun WorldMapCanvas(
                 cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(target, zoom))
             }
         }
+    }
+
+    // A stamp asked for this country. Fitted once per request and before the opening position
+    // is marked settled, so the general fit below does not immediately pull the camera back out
+    // to the whole library.
+    // Keyed on the request alone. Keying on the pins as well — which is how it waited for them
+    // to load — re-framed the country every time a city was added, so adding a show anywhere
+    // yanked the camera back to a stamp tapped long before.
+    LaunchedEffect(fitCountry) {
+        if (fitCountry == null) return@LaunchedEffect
+        val loaded = snapshotFlow { pins }.first { it.isNotEmpty() }
+        val inCountry = loaded.filter { it.city.country.equals(fitCountry, ignoreCase = true) }
+        if (inCountry.isEmpty()) return@LaunchedEffect
+        val bounds = LatLngBounds.builder()
+            .apply { inCountry.forEach { include(LatLng(it.latitude, it.longitude)) } }
+            .build()
+        val update = if (inCountry.size == 1) {
+            CameraUpdateFactory.newLatLngZoom(bounds.center, 9f)
+        } else {
+            CameraUpdateFactory.newLatLngBounds(bounds, 128)
+        }
+        runCatching { cameraPositionState.animate(update) }
+        cameraState.openingSettled = true
+        cameraState.lastFittedKey = loaded.joinToString(",") { it.city.id }
     }
 
     // Re-fit whenever the set of cities changes, so a newly added show is never off-screen —

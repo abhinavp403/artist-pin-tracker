@@ -15,6 +15,8 @@ import dev.abhinav.artistpin.data.sync.LibrarySync
 import java.time.LocalDate
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -114,6 +116,29 @@ class WorldMapViewModel(
 
     override fun onCitySelected(cityId: String) {
         _uiState.update { it.copy(selectedCityId = cityId) }
+    }
+
+    /**
+     * Opens a venue the user picked somewhere else — the stats screen's treemap.
+     *
+     * Waits for the venue pins to arrive rather than giving up on an empty list: this runs on a
+     * freshly created screen, and on a cold start the pins are still a query away, which would
+     * otherwise make the handoff work only when the map had already been visited.
+     */
+    fun focusVenue(venueId: String) {
+        viewModelScope.launch {
+            // Waits for the pins to arrive, then gives up rather than waiting forever: a venue
+            // deleted on another device will never appear, and a coroutine parked on a predicate
+            // that can no longer match is a tap that silently does nothing.
+            val pins = uiState.map { it.venuePins }.first { it.isNotEmpty() }
+            val pin = pins.firstOrNull { it.venue.id == venueId }
+            if (pin == null) {
+                _effects.trySend(WorldMapEffect.ShowMessage("That venue is no longer in your library"))
+                return@launch
+            }
+            onCitySelected(pin.venue.cityId)
+            if (_uiState.value.expandedVenueId != venueId) onVenueToggled(venueId)
+        }
     }
 
     override fun onSelectionDismissed() {
