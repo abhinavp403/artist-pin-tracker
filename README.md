@@ -20,6 +20,10 @@ happened.
 - **It works with no signal.** Reads come from a local database, so the map and your shows are
   there underground. A save lands locally and returns immediately; the change queues and is sent
   when connectivity comes back, with the dock showing how many are waiting.
+- **A stats screen** — "Your Stats", from the counts pill or the menu. Shows per year as a chart
+  of one tile per show, the month you go out most, a treemap of the venues you keep returning to,
+  and a passport stamp per country. The charts open what they describe: a venue box unfolds that
+  venue's shows, a stamp frames that country on the map.
 - **Backup and restore** to a JSON file — one format that round-trips through either store, so a
   file written before the migration restores into the account and vice versa.
 - **Photos are backed up** to private object storage and served through short-lived signed URLs, so
@@ -63,6 +67,12 @@ USE_BACKEND=false
 # Optional — both have working defaults
 API_BASE_URL=https://your-own-proxy.vercel.app/api/
 ARTISTPIN_API_KEY=matches-ARTISTPIN_API_KEY-on-the-proxy
+
+# Debug builds only. Skips the sign-in gate and seeds the library from
+# app/src/debug/assets/dev-library.json — an exported backup you drop there yourself — so an
+# emulator can show real screens without an account. The release build compiles this as a
+# literal false, so nothing here can switch it on in something shippable.
+DEV_SKIP_AUTH=false
 ```
 
 - **Supabase URL and key:** Settings → Data API in your project. The publishable key is meant to
@@ -91,12 +101,17 @@ app/src/main/java/dev/abhinav/artistpin/
 ├── core/            design system, auth, database (Room), DI modules, shared models
 ├── data/            repositories, backend client, third-party API clients
 ├── data/sync/       the outbox, the drain, and the WorkManager job that runs it
-├── feature/         one package per screen (home/map, artist, event, event edit, sign-in)
+├── feature/         one package per screen (home/map, artist, event, event edit, stats, sign-in)
 └── navigation/      nav graph and routes
 
 supabase/            schema, RLS policies and functions — the database in version control
 server/              Vercel proxy holding the Spotify credentials
 ```
+
+Anything a chart claims is arithmetic, and arithmetic is where a screen can be wrong without
+looking wrong — so the treemap layout, the chart sizing and the generated headlines are pure
+functions in [`feature/stats`](app/src/main/java/dev/abhinav/artistpin/feature/stats), tested
+without a screen.
 
 `ConcertRepository` is the boundary every screen goes through, and it is an interface. That seam is
 why moving from one phone's SQLite to a shared Postgres, and then to offline-first sync, changed no
