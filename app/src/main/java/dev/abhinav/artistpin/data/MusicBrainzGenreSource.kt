@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
+import kotlin.time.Duration.Companion.milliseconds
 
 @Serializable
 data class MusicBrainzSearchResponse(
@@ -66,7 +67,7 @@ class MusicBrainzGenreSource(
     private val api: MusicBrainzApi,
     private val minRequestSpacingMillis: Long = 1_100,
     private val now: () -> Long = System::currentTimeMillis,
-    private val pause: suspend (Long) -> Unit = { delay(it) },
+    private val pause: suspend (Long) -> Unit = { delay(it.milliseconds) },
 ) : ArtistImageSource {
 
     private val throttle = Mutex()

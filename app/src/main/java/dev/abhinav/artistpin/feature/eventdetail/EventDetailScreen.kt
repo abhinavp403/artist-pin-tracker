@@ -830,5 +830,3 @@ private fun FooterActions(onEdit: () -> Unit, onDelete: () -> Unit) {
 private const val MAX_PICK = 50
 private const val LINEUP_COLUMNS = 3
 private const val PHOTO_COLUMNS = 3
-private val MONTH_SHORT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM", Locale.US)
-private val WEEKDAY_YEAR: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE, yyyy", Locale.US)

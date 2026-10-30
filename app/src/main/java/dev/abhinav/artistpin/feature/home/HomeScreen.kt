@@ -2,7 +2,6 @@ package dev.abhinav.artistpin.feature.home
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
@@ -673,7 +672,7 @@ private fun Dock(
                             bringIntoView.bringIntoView()
                             // Again once the list has finished unfolding — at the first request
                             // the shows are still animating open and barely take up any height.
-                            delay(PIN_MOTION_MILLIS.toLong())
+                            delay(PIN_MOTION_MILLIS.toLong().milliseconds)
                             bringIntoView.bringIntoView()
                         }
                         Column(Modifier.bringIntoViewRequester(bringIntoView)) {

@@ -21,7 +21,7 @@ fun yearColumnWidth(
     gap: Float,
     visible: Int = VISIBLE_YEARS,
 ): Float? {
-    if (years <= visible || visible <= 0 || availableWidth <= 0f) return null
+    if (visible !in 1..<years || availableWidth <= 0f) return null
     return ((availableWidth - gap * (visible - 1)) / visible).coerceAtLeast(0f)
 }
 

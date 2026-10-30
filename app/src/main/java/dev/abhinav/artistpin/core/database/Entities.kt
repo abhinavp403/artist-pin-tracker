@@ -180,11 +180,6 @@ data class VenueWithCity(
     @Relation(parentColumn = "cityId", entityColumn = "id") val city: CityEntity,
 )
 
-data class ArtistWithBilling(
-    @Embedded val artist: ArtistEntity,
-    val billing: Billing,
-)
-
 data class EventWithDetails(
     @Embedded val event: EventEntity,
     @Relation(entity = VenueEntity::class, parentColumn = "venueId", entityColumn = "id")

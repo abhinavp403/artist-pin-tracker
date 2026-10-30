@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import kotlin.time.Duration.Companion.milliseconds
 
 enum class ArtistRole { HEADLINER, SUPPORT }
 
@@ -366,7 +367,7 @@ class EventEditViewModel(
             return
         }
         artistSearchJob = viewModelScope.launch {
-            delay(SEARCH_DEBOUNCE_MS)
+            delay(SEARCH_DEBOUNCE_MS.milliseconds)
             _uiState.update { it.copy(isSearchingArtists = true) }
             val results = artistSearch.search(trimmed)
             _uiState.update { it.copy(artistResults = results, isSearchingArtists = false) }
@@ -456,7 +457,7 @@ class EventEditViewModel(
             return
         }
         venueSearchJob = viewModelScope.launch {
-            delay(SEARCH_DEBOUNCE_MS)
+            delay(SEARCH_DEBOUNCE_MS.milliseconds)
             _uiState.update { it.copy(isSearchingVenues = true) }
             when (val result = venueSearch.search(query)) {
                 is DataResult.Success -> _uiState.update {

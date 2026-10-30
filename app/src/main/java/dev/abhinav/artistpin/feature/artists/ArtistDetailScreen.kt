@@ -1,7 +1,6 @@
 package dev.abhinav.artistpin.feature.artists
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,11 +64,11 @@ import dev.abhinav.artistpin.core.designsystem.titleCaseWords
 import dev.abhinav.artistpin.core.model.ArtistDeletionImpact
 import dev.abhinav.artistpin.core.model.EventSummary
 import org.koin.androidx.compose.koinViewModel
-import java.io.File
 import java.time.LocalDate
 import java.time.Period
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.core.net.toUri
 
 /**
  * Artist detail: a full-bleed hero that melts into the page, a stat strip, and every time you saw
@@ -427,7 +426,7 @@ private fun SpotifyButton(url: String) {
             .background(Pin.SpotifyGreen)
             .clickable {
                 // No Spotify app or browser is possible; a missing handler must not crash.
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
             }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,

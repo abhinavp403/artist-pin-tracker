@@ -9,7 +9,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
-import kotlin.coroutines.coroutineContext
 
 data class ImportedMedia(
     val localPath: String,

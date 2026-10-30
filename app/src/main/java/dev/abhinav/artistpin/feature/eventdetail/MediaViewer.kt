@@ -40,6 +40,7 @@ import dev.abhinav.artistpin.core.designsystem.rememberMediaModel
 import dev.abhinav.artistpin.core.model.EventMedia
 import kotlinx.coroutines.delay
 import java.io.File
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val REEL_IMAGE_DURATION_MS = 3_000L
 
@@ -84,7 +85,7 @@ fun MediaViewerDialog(
                 LaunchedEffect(pagerState.currentPage, media.size) {
                     val current = media[pagerState.currentPage]
                     if (!current.isVideo) {
-                        delay(REEL_IMAGE_DURATION_MS)
+                        delay(REEL_IMAGE_DURATION_MS.milliseconds)
                         val next = pagerState.currentPage + 1
                         if (next < media.size) pagerState.animateScrollToPage(next) else onTogglePlayback()
                     }

@@ -10,6 +10,7 @@ import java.time.LocalDate
 import java.time.Month
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Turns the library into the numbers the stats screen reads.
@@ -81,7 +82,7 @@ fun List<EventStatsRow>.toLibraryStats(today: LocalDate = LocalDate.now()): Libr
 private fun halfYearsBetween(from: LocalDate, to: LocalDate): Double {
     if (!to.isAfter(from)) return 0.0
     val months = ChronoUnit.MONTHS.between(from, to)
-    return Math.round(months / 6.0) / 2.0
+    return (months / 6.0).roundToInt() / 2.0
 }
 
 /**

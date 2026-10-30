@@ -23,7 +23,7 @@ fun rememberMediaModel(item: EventMedia): State<Any?> {
     // Starts null and resolves off the composition. Checking the file here instead would put a
     // stat() syscall in the layout pass, once per item per recomposition — unbounded disk work on
     // the UI thread while the grid scrolls. The cost is one frame of placeholder.
-    return produceState<Any?>(initialValue = null, item.id, item.localPath, item.remotePath) {
+    return produceState(initialValue = null, item.id, item.localPath, item.remotePath) {
         value = resolver.resolve(item)
     }
 }
@@ -38,7 +38,7 @@ fun rememberMediaModel(item: EventMedia): State<Any?> {
 @Composable
 fun rememberThumbnailModel(localPath: String?, remotePath: String?): State<Any?> {
     val resolver: MediaUrlResolver = koinInject()
-    return produceState<Any?>(initialValue = null, localPath, remotePath) {
+    return produceState(initialValue = null, localPath, remotePath) {
         value = resolver.resolveThumbnail(localPath, remotePath)
     }
 }
