@@ -71,6 +71,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -123,6 +125,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filter
 import kotlin.math.hypot
+import kotlin.time.Duration.Companion.milliseconds
 
 enum class HomeTab { MAP, ARTISTS }
 
@@ -174,14 +177,6 @@ fun HomeScreen(
     var sheetExpanded by state::venuesExpanded
     val cameraPositionState = state.camera.position
 
-    // Keyed by the request, so returning to the map later does not re-open what you closed.
-    LaunchedEffect(focusVenueId) {
-        if (focusVenueId != null) {
-            tab = HomeTab.MAP
-            sheetExpanded = true
-            mapViewModel.focusVenue(focusVenueId)
-        }
-    }
     LaunchedEffect(focusCountry) {
         if (focusCountry != null) tab = HomeTab.MAP
     }
@@ -272,6 +267,20 @@ fun HomeScreen(
         if (dockCity == null) sheetExpanded = false
     }
 
+    // Keyed by the request, so returning to the map later does not re-open what you closed.
+    LaunchedEffect(focusVenueId) {
+        if (focusVenueId == null) return@LaunchedEffect
+        tab = HomeTab.MAP
+        if (mapViewModel.focusVenue(focusVenueId) == null) return@LaunchedEffect
+        // Expanded only once the camera has actually arrived over the city. dockCity is derived
+        // from where the camera is, not from what is selected, so expanding any earlier is undone
+        // by the effect that collapses the list whenever there is no city under the camera.
+        withTimeoutOrNull(VENUE_HANDOFF_TIMEOUT_MS.milliseconds) {
+            snapshotFlow { dockCity }.first { it != null }
+            sheetExpanded = true
+        }
+    }
+
     val dockVenues = remember(dockCity, uiState.venuePins) {
         uiState.venuePins
             .filter { it.venue.cityId == dockCity?.city?.id }
@@ -315,6 +324,7 @@ fun HomeScreen(
                     isLocatingUser = uiState.isLocatingUser,
                     cameraState = state.camera,
                     fitCountry = focusCountry,
+                    focusVenueId = focusVenueId,
                     onCitySelected = mapViewModel::onCitySelected,
                     // Tapping a venue pin unfolds that venue's shows in the dock, which is the
                     // only place on this screen that can hold them.
@@ -925,6 +935,9 @@ private fun CityPin.distanceTo(latitude: Double, longitude: Double): Double =
 
 /** Roughly metro level: below this, "the city you're looking at" isn't a real question. */
 private const val CITY_DOCK_ZOOM = 8f
+
+/** Long enough for the camera to fly across the world, short enough not to hang on failure. */
+private const val VENUE_HANDOFF_TIMEOUT_MS = 5_000L
 
 /** ~55km at the equator — panned further than this from every city, the row disappears. */
 private const val NEAR_ENOUGH_DEGREES = 0.5

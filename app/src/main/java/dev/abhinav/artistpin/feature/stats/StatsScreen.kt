@@ -169,7 +169,7 @@ private fun Header(onBack: () -> Unit) {
         }
         Spacer(Modifier.width(10.dp))
         Text(
-            "Your stats",
+            "Your Stats",
             color = Pin.OnPage,
             style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
         )
@@ -542,25 +542,16 @@ private fun YearColumn(
 private fun BusiestMonthCard(stats: LibraryStats) {
     val busiest = stats.busiestMonth
     val max = stats.showsPerMonth.maxOfOrNull { it.shows } ?: 0
-    // Tapping a column answers "how many in June?" in place. Only the peak month's count is
-    // written on the card otherwise, and a chart you cannot interrogate invites guessing at it.
-    // Opens on the month you are actually in: "how am I doing this October" is the question you
-    // have while standing in October, and the peak is one tap away.
+    // Opens on the month you are actually in — "how am I doing this October" is the question you
+    // have while standing in October — and any other month is one tap away. Only the shown
+    // month's count is written on the card, so a chart you cannot interrogate would leave the
+    // other eleven to guesswork.
     val currentMonth = remember { java.time.LocalDate.now().month }
     var picked by remember { mutableStateOf<java.time.Month?>(currentMonth) }
     val shown = stats.showsPerMonth.firstOrNull { it.month == picked } ?: busiest
     StatsCard(PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             Column(Modifier.weight(1f)) {
-                Text(
-                    when (shown?.month) {
-                        busiest?.month -> "Busiest month"
-                        currentMonth -> "This month"
-                        else -> "That month"
-                    },
-                    color = Pin.OnPageSecondary,
-                    style = TextStyle(fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold),
-                )
                 Text(
                     shown?.month?.getDisplayName(JavaTextStyle.FULL, Locale.getDefault()).orEmpty(),
                     color = Pin.Kraft,
@@ -570,7 +561,6 @@ private fun BusiestMonthCard(stats: LibraryStats) {
                         letterSpacing = (-0.8).sp,
                         lineHeight = 32.sp,
                     ),
-                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
             Text(
@@ -590,7 +580,7 @@ private fun BusiestMonthCard(stats: LibraryStats) {
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(6.dp))
-                        .clickable { picked = if (picked == tally.month) null else tally.month },
+                        .clickable { picked = if (picked == tally.month) currentMonth else tally.month },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
@@ -634,12 +624,6 @@ private fun VenueLoyaltyCard(stats: LibraryStats, onOpenVenue: (String) -> Unit)
                 stats.venueHeadline(),
                 color = Pin.OnPage,
                 style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp),
-            )
-            Text(
-                "Box size = shows at that venue",
-                color = Pin.OnPageSecondary,
-                style = TextStyle(fontSize = 12.5.sp),
-                modifier = Modifier.padding(top = 3.dp),
             )
         }
 

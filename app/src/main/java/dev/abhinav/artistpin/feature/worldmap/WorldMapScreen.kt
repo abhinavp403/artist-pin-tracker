@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Stable
@@ -103,6 +104,8 @@ fun WorldMapCanvas(
     cameraState: WorldMapCameraState,
     /** A country to frame on arrival, from a passport stamp on the stats screen. */
     fitCountry: String? = null,
+    /** A venue to fly to on arrival, from a treemap box on the stats screen. */
+    focusVenueId: String? = null,
     onCitySelected: (String) -> Unit,
     onVenueSelected: (venueId: String, cityId: String) -> Unit,
     onMapClick: () -> Unit,
@@ -110,6 +113,12 @@ fun WorldMapCanvas(
 ) {
     val cameraPositionState = cameraState.position
     val scope = rememberCoroutineScope()
+
+    // Read through rememberUpdatedState so the effects below can wait for them. snapshotFlow over
+    // a parameter captures the value the effect started with and never emits again — at launch
+    // that is an empty list, which is a wait that never ends.
+    val latestPins by rememberUpdatedState(pins)
+    val latestVenuePins by rememberUpdatedState(venuePins)
 
     /** Tapping a pin flies to it, so a tap always reveals more detail than it replaces. */
     fun zoomTo(target: LatLng, zoom: Float) {
@@ -120,6 +129,29 @@ fun WorldMapCanvas(
         }
     }
 
+    // A treemap box asked for this venue. The dock shows a city only when the camera is over it
+    // and zoomed past CITY_DOCK_ZOOM, so selecting the venue without moving the camera opens the
+    // map on nothing — which is what the handoff did before this.
+    LaunchedEffect(focusVenueId) {
+        if (focusVenueId == null) return@LaunchedEffect
+        val pin = snapshotFlow { latestVenuePins }
+            .first { it.isNotEmpty() }
+            .firstOrNull { it.venue.id == focusVenueId }
+            ?: return@LaunchedEffect
+        runCatching {
+            cameraPositionState.animate(
+                CameraUpdateFactory.newLatLngZoom(
+                    LatLng(pin.venue.latitude, pin.venue.longitude),
+                    VENUE_ZOOM,
+                ),
+            )
+        }
+        // Claims the opening position, or the fit-to-every-city effect below pulls straight back
+        // out to the whole library.
+        cameraState.openingSettled = true
+        cameraState.lastFittedKey = latestPins.joinToString(",") { it.city.id }
+    }
+
     // A stamp asked for this country. Fitted once per request and before the opening position
     // is marked settled, so the general fit below does not immediately pull the camera back out
     // to the whole library.
@@ -128,7 +160,7 @@ fun WorldMapCanvas(
     // yanked the camera back to a stamp tapped long before.
     LaunchedEffect(fitCountry) {
         if (fitCountry == null) return@LaunchedEffect
-        val loaded = snapshotFlow { pins }.first { it.isNotEmpty() }
+        val loaded = snapshotFlow { latestPins }.first { it.isNotEmpty() }
         val inCountry = loaded.filter { it.city.country.equals(fitCountry, ignoreCase = true) }
         if (inCountry.isEmpty()) return@LaunchedEffect
         val bounds = LatLngBounds.builder()

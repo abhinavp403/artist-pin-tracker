@@ -7,6 +7,7 @@ import dev.abhinav.artistpin.core.designsystem.toUserMessage
 import dev.abhinav.artistpin.core.location.DeviceLocationProvider
 import dev.abhinav.artistpin.core.media.BackupFileStore
 import dev.abhinav.artistpin.core.model.DataResult
+import dev.abhinav.artistpin.core.model.VenuePin
 import dev.abhinav.artistpin.BuildConfig
 import dev.abhinav.artistpin.data.LibraryBackup
 import dev.abhinav.artistpin.data.ConcertRepository
@@ -119,26 +120,26 @@ class WorldMapViewModel(
     }
 
     /**
-     * Opens a venue the user picked somewhere else — the stats screen's treemap.
+     * Selects a venue chosen on another screen, and returns it so the caller can take the map
+     * there. Null when the library no longer has it.
      *
-     * Waits for the venue pins to arrive rather than giving up on an empty list: this runs on a
-     * freshly created screen, and on a cold start the pins are still a query away, which would
-     * otherwise make the handoff work only when the map had already been visited.
+     * Suspends rather than launching: opening a venue is three things — the city, the venue, and
+     * the camera — and the camera belongs to the map. Returning the pin lets the one caller
+     * sequence all three instead of each guessing when the others have happened.
      */
-    fun focusVenue(venueId: String) {
-        viewModelScope.launch {
-            // Waits for the pins to arrive, then gives up rather than waiting forever: a venue
-            // deleted on another device will never appear, and a coroutine parked on a predicate
-            // that can no longer match is a tap that silently does nothing.
-            val pins = uiState.map { it.venuePins }.first { it.isNotEmpty() }
-            val pin = pins.firstOrNull { it.venue.id == venueId }
-            if (pin == null) {
-                _effects.trySend(WorldMapEffect.ShowMessage("That venue is no longer in your library"))
-                return@launch
-            }
-            onCitySelected(pin.venue.cityId)
-            if (_uiState.value.expandedVenueId != venueId) onVenueToggled(venueId)
+    suspend fun focusVenue(venueId: String): VenuePin? {
+        // Waits for the pins to arrive, then gives up rather than waiting forever: a venue
+        // deleted on another device will never appear, and a coroutine parked on a predicate
+        // that can no longer match is a tap that silently does nothing.
+        val pins = uiState.map { it.venuePins }.first { it.isNotEmpty() }
+        val pin = pins.firstOrNull { it.venue.id == venueId }
+        if (pin == null) {
+            _effects.trySend(WorldMapEffect.ShowMessage("That venue is no longer in your library"))
+            return null
         }
+        onCitySelected(pin.venue.cityId)
+        if (_uiState.value.expandedVenueId != venueId) onVenueToggled(venueId)
+        return pin
     }
 
     override fun onSelectionDismissed() {
